@@ -1,0 +1,8 @@
+data/processed/*
+data/raw/*
+models/*
+reports/*
+**/__pycache__
+wandb
+.*
+!**/.gitkeep
