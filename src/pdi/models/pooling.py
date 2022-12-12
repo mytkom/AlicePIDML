@@ -6,7 +6,7 @@ from pdi.models.utils import NeuralNet
 
 class MaxPooling(nn.Module):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(MaxPooling, self).__init__()
 
     def forward(self, embeddings):

@@ -1,12 +1,15 @@
 import json
+from typing import Hashable, cast
 
 import numpy as np
 import pandas as pd
-from pdi.data.constants import N_COLUMNS, PROCESSED_DIR
-from pdi.data.types import (AddDict, Additional, DfOrArray, GIDDict, GroupID,
-                            InputTarget, InputTargetDict, Split, SplitDict)
+from numpy.typing import NDArray
+from pdi.data.constants import N_COLUMNS, PROCESSED_DIR, DROP_COLUMNS
+from pdi.data.types import (Additional, AddMap, DfOrArray, GIDMap, GroupID,
+                            InputTarget, InputTargetMap, Split, SplitMap)
 from pdi.data.utils import DataPreparation, GroupedDataPreparation
 from sklearn.linear_model import LinearRegression  # type: ignore
+
 
 
 class DeletePreparation(DataPreparation):
@@ -19,18 +22,24 @@ class DeletePreparation(DataPreparation):
                 "DeletePreparation can only prepare complete cases.")
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
 
         input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
         na_rows = input[input.isnull().any(axis=1)].index
 
-        res = {
-            InputTarget.INPUT: input.drop(index=na_rows),
-            InputTarget.TARGET: targets.drop(index=na_rows)
-        }
-        return super()._do_preprocess_split(res)
+        input = input.drop(index=na_rows)
+        targets = targets.drop(index=na_rows)
+
+        return ({
+            InputTarget.INPUT: input.values,
+            InputTarget.TARGET: targets.values
+        }, {
+            column: input.loc[:, [column.name]].values
+            for column in Additional
+        })
 
 
 class MeanImputation(DataPreparation):
@@ -43,24 +52,27 @@ class MeanImputation(DataPreparation):
                 "Use DeletePreparation to only get complete cases.")
 
     def _do_process_data(
-        self, data: SplitDict[InputTargetDict[pd.DataFrame]]
-    ) -> tuple[SplitDict[InputTargetDict[DfOrArray]],
-               SplitDict[AddDict[DfOrArray]], ]:
+        self, data: SplitMap[InputTargetMap[pd.DataFrame]]
+    ) -> tuple[SplitMap[InputTargetMap[NDArray[np.float32]]],
+               SplitMap[AddMap[NDArray[np.float32]]]]:
 
         self.mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
         return super()._do_process_data(data)
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
 
-        input = split[InputTarget.INPUT]
+        input = split[InputTarget.INPUT].fillna(self.mean_df)
         targets = split[InputTarget.TARGET]
-        res = {
-            InputTarget.INPUT: input.fillna(self.mean_df),
-            InputTarget.TARGET: targets
-        }
-        return super()._do_preprocess_split(res)
+        return ({
+            InputTarget.INPUT: input.values,
+            InputTarget.TARGET: targets.values
+        }, {
+            column: input.loc[:, [column.name]].values
+            for column in Additional
+        })
 
     def save_data(self) -> None:
         super().save_data()
@@ -78,9 +90,9 @@ class RegressionImputation(DataPreparation):
         self.regression = LinearRegression()
 
     def _do_process_data(
-        self, data: SplitDict[InputTargetDict[pd.DataFrame]]
-    ) -> tuple[SplitDict[InputTargetDict[DfOrArray]],
-               SplitDict[AddDict[DfOrArray]], ]:
+        self, data: SplitMap[InputTargetMap[pd.DataFrame]]
+    ) -> tuple[SplitMap[InputTargetMap[NDArray[np.float32]]],
+               SplitMap[AddMap[NDArray[np.float32]]]]:
 
         train_input = data[Split.TRAIN][InputTarget.INPUT]
 
@@ -96,22 +108,25 @@ class RegressionImputation(DataPreparation):
         return super()._do_process_data(data)
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
 
-        input_data = split[InputTarget.INPUT]
+        input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
-        pred = self.regression.predict(input_data.loc[:,
-                                                      ~self.missing_features])
+        pred = self.regression.predict(input.loc[:, ~self.missing_features])
         pred = pd.DataFrame(pred,
-                            columns=input_data.columns[self.missing_features],
-                            index=input_data.index)
+                            columns=input.columns[self.missing_features],
+                            index=input.index)
 
-        res = {
-            InputTarget.INPUT: input_data.fillna(pred),
-            InputTarget.TARGET: targets
-        }
-        return super()._do_preprocess_split(res)
+        input = input.fillna(pred)
+        return ({
+            InputTarget.INPUT: input.values,
+            InputTarget.TARGET: targets.values
+        }, {
+            column: input.loc[:, [column.name]].values
+            for column in Additional
+        })
 
     def save_data(self) -> None:
         super().save_data()
@@ -126,28 +141,31 @@ class EnsemblePreparation(GroupedDataPreparation):
     def __init__(self, complete_only: bool = False):
         super().__init__(complete_only)
 
-    def _group_data(self, data: pd.DataFrame) -> GIDDict[pd.DataFrame]:
+    def _group_data(self, data: pd.DataFrame) -> GIDMap[pd.DataFrame]:
         missing = data.isnull()
-        groups = missing.groupby(list(missing.columns), dropna=False).groups
+        groups = missing.groupby(list(missing.columns.drop(DROP_COLUMNS)), dropna=False).groups
         return {
-            np.sum(2**np.arange(len(key)) * ~np.array(key)): data.loc[val]
+            GroupID(
+                np.sum(2**np.arange(len(cast(list[bool], key))) *
+                       ~np.array(key))): data.loc[val]
             for key, val in groups.items()
         }
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
 
         input_data = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
-        add_data = {
-            column: split[InputTarget.INPUT].loc[:, [column.name]]
+        add_data: AddMap[NDArray[np.float32]] = {
+            column: input_data.loc[:, [column.name]].values
             for column in Additional
         }
         return (
             {
-                InputTarget.INPUT: input_data.dropna(axis="columns"),
-                InputTarget.TARGET: targets,
+                InputTarget.INPUT: input_data.dropna(axis="columns").values,
+                InputTarget.TARGET: targets.values,
             },
             add_data,
         )
@@ -160,16 +178,20 @@ class FeatureSetPreparation(GroupedDataPreparation):
     def __init__(self, complete_only: bool = False):
         super().__init__(complete_only)
 
-    def _group_data(self, data: pd.DataFrame) -> GIDDict[pd.DataFrame]:
+    def _group_data(self, data: pd.DataFrame) -> GIDMap[pd.DataFrame]:
         missing_values = data.isnull().sum(axis=1)
         groups = data.groupby(missing_values.tolist(), dropna=False).groups
-        return {gid: data.loc[group_idx] for gid, group_idx in groups.items()}
+        return {
+            GroupID(cast(int, gid)): data.loc[group_idx]
+            for gid, group_idx in groups.items()
+        }
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
 
-        def make_feature_set(df: pd.DataFrame) -> np.ndarray:
+        def make_feature_set(df: pd.DataFrame) -> NDArray[np.float32]:
             rows, cols = df.shape
             non_null_count = df.iloc[0].count()
             features = non_null_count
@@ -180,17 +202,17 @@ class FeatureSetPreparation(GroupedDataPreparation):
                 (rows, features, N_COLUMNS))
             feature_values = np.reshape(df.values[is_not_null],
                                         (rows, features, 1))
-            feature_set: np.ndarray = np.concatenate(
+            feature_set: NDArray[np.float32] = np.concatenate(
                 (one_hot_indices, feature_values), -1)
             return feature_set
 
         input_data = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
-        add_data = {
-            column: split[InputTarget.INPUT].loc[:, [column.name]]
+        add_data: AddMap[NDArray[np.float32]] = {
+            column: input_data.loc[:, [column.name]].values
             for column in Additional
         }
         return ({
             InputTarget.INPUT: make_feature_set(input_data),
-            InputTarget.TARGET: targets
+            InputTarget.TARGET: targets.values
         }, add_data)

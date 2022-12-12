@@ -7,28 +7,30 @@ from pdi.data.constants import GROUP_ID_KEY
 from pdi.evaluate import validate_one_epoch
 
 
-def train_one_epoch(model,
-                    target_code,
-                    train_loader,
-                    device,
-                    optimizer,
-                    loss_fun,
-                    epoch=None):
+def train_one_epoch(model, target_code, train_loader, device, optimizer,
+                    loss_fun):
     model.train()
-    for input_data, targets, data_dict in tqdm(train_loader):
+    LOG_EVERY = 50
+    loss_run_sum = 0
+    for i, (input_data, targets, data_dict) in enumerate(tqdm(train_loader),
+                                                         start=1):
         input_data = input_data.to(device)
         binary_targets = (targets == target_code).type(torch.float).to(device)
         optimizer.zero_grad()
 
         group_id = data_dict.get(GROUP_ID_KEY)
         if group_id is None:
-            out = model(input_data).squeeze()
+            out = model(input_data)
         else:
-            out = model(input_data, group_id).squeeze()
+            out = model(input_data, group_id)
         loss = loss_fun(out, binary_targets)
         loss.backward()
         optimizer.step()
-        wandb.log({"epoch": epoch, "loss": loss.item()})
+
+        loss_run_sum += loss.item()
+        if i % LOG_EVERY == 0:
+            wandb.log({"loss": loss_run_sum})
+            loss_run_sum = 0
 
 
 def train(model, target_code, device, train_loader, val_loader, pos_weight):
@@ -61,7 +63,7 @@ def train(model, target_code, device, train_loader, val_loader, pos_weight):
         })
         print(f"Epoch: {epoch}, F1: {val_f1:.4f}")
 
-        if min_loss - val_loss > wandb.config.patience_threshold:
+        if 1 - val_loss / min_loss > wandb.config.patience_threshold:
             min_loss = val_loss
             counter = 0
         else:

@@ -2,18 +2,20 @@ import gzip
 import os
 import pickle
 from itertools import chain
-from typing import Any, Generic, Iterable, Iterator, TypeVar, cast
+from random import Random
+from typing import (Any, Dict, Generic, Iterable, Iterator, MutableMapping,
+                    TypeVar, Union, cast)
 
 import numpy as np
 import pandas as pd
 import torch
-from numpy.random import default_rng
+from numpy.typing import NDArray
 from pdi.data.constants import (COLUMNS_TO_SCALE, CSV_DELIMITER, DROP_COLUMNS,
                                 GROUP_ID_KEY, INPUT_PATH, MISSING_VALUES, SEED,
                                 TARGET_COLUMN, TEST_SIZE, TRAIN_SIZE)
-from pdi.data.types import (AddDict, Additional, DatasetItem, DfOrArray,
-                            GIDDict, GroupID, InputTarget, InputTargetDict,
-                            Split, SplitDict)
+from pdi.data.types import (Additional, AddMap, DatasetItem, DfOrArray, GIDMap,
+                            GroupID, InputTarget, InputTargetMap, Split,
+                            SplitMap)
 from sklearn.model_selection import train_test_split  # type: ignore
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
@@ -26,10 +28,10 @@ class CombinedDataLoader(Generic[T]):
     def __init__(self, shuffle: bool, *dataloaders: DataLoader[T]):
         self.shuffle = shuffle
         self.dataloaders = dataloaders
-        self.rng = default_rng(SEED)
+        self.rng = Random(SEED)
 
     def _reset_seed(self) -> None:
-        self.rng = default_rng(SEED)
+        self.rng = Random(SEED)
 
     def __iter__(self) -> Iterator[T]:
         if not self.shuffle:
@@ -72,9 +74,9 @@ class DataPreparation:
     save_dir: str
 
     def __init__(self) -> None:
-        self.scaling_params = pd.DataFrame()
-        self.input_target: SplitDict[InputTargetDict[np.ndarray]] = {}
-        self.additional: SplitDict[AddDict[np.ndarray]] = {}
+        self.scaling_params = pd.DataFrame(columns=["column", "mean", "std"])
+        self.input_target: SplitMap[InputTargetMap[NDArray[np.float32]]] = {}
+        self.additional: SplitMap[AddMap[NDArray[np.float32]]] = {}
 
     def pos_weight(self, target: int) -> float:
         self._try_load_preprocessed_data([Split.TRAIN])
@@ -87,16 +89,24 @@ class DataPreparation:
 
     def prepare_data(self) -> None:
         data = self._load_input_data()
+        data = self._delete_unique_targets(data)
         data = self._make_missing_null(data)
         data = self._normalize_data(data)
         split_data = self._test_train_split(data)
         split_data_2 = self._input_target_split(split_data)
-        processed_data, additional_data = self._do_process_data(split_data_2)
-        self.input_target = self._transform_df_to_np(processed_data)
-        self.additional = self._transform_df_to_np(additional_data)
+        self.input_target, self.additional = self._do_process_data(
+            split_data_2)
 
     def _load_input_data(self) -> pd.DataFrame:
         return pd.read_csv(INPUT_PATH, sep=CSV_DELIMITER, index_col=0)
+
+    def _delete_unique_targets(self, data: pd.DataFrame) -> pd.DataFrame:
+        THRESHOLD = 100
+        target_counts = data[TARGET_COLUMN].value_counts()
+        for target, count in target_counts.items():
+            if count < THRESHOLD:
+                data = data[data[TARGET_COLUMN] != target]
+        return data
 
     def _make_missing_null(self, data: pd.DataFrame) -> pd.DataFrame:
         for column, val in MISSING_VALUES.items():
@@ -105,27 +115,35 @@ class DataPreparation:
 
     def _normalize_data(self, data: pd.DataFrame) -> pd.DataFrame:
         for column in COLUMNS_TO_SCALE:
-            self.scaling_params = self.scaling_params.append(
-                {
-                    "column": column,
-                    "mean": np.mean(data[column]),
-                    "std": np.std(data[column]),
-                },
+            self.scaling_params = pd.concat(
+                [
+                    self.scaling_params,
+                    pd.DataFrame(
+                        {
+                            "column": column,
+                            "mean": np.mean(data[column]),
+                            "std": np.std(data[column]),
+                        },
+                        index=[0])
+                ],
                 ignore_index=True,
             )
             data[column] = (data[column] - np.mean(data[column])) / np.std(
                 data[column])
         return data
 
-    def _test_train_split(self, data: pd.DataFrame) -> SplitDict[pd.DataFrame]:
+    def _test_train_split(self, data: pd.DataFrame) -> SplitMap[pd.DataFrame]:
         train_to_val_ratio = TRAIN_SIZE / (1 - TEST_SIZE)
-        (data_not_test, test_data) = train_test_split(data,
-                                                      test_size=TEST_SIZE,
-                                                      random_state=SEED)
-        (train_data,
-         val_data) = train_test_split(data_not_test,
-                                      train_size=train_to_val_ratio,
-                                      random_state=SEED)
+        (data_not_test,
+         test_data) = train_test_split(data,
+                                       test_size=TEST_SIZE,
+                                       random_state=SEED,
+                                       stratify=data.loc[:, [TARGET_COLUMN]])
+        (train_data, val_data) = train_test_split(
+            data_not_test,
+            train_size=train_to_val_ratio,
+            random_state=SEED,
+            stratify=data_not_test.loc[:, [TARGET_COLUMN]])
         return {
             Split.TRAIN: train_data,
             Split.VAL: val_data,
@@ -133,10 +151,10 @@ class DataPreparation:
         }
 
     def _input_target_split(
-        self, data: SplitDict[pd.DataFrame]
-    ) -> SplitDict[InputTargetDict[pd.DataFrame]]:
+        self, data: SplitMap[pd.DataFrame]
+    ) -> SplitMap[InputTargetMap[pd.DataFrame]]:
 
-        def do_split(data: pd.DataFrame) -> InputTargetDict[pd.DataFrame]:
+        def do_split(data: pd.DataFrame) -> InputTargetMap[pd.DataFrame]:
             targets = data.loc[:, [TARGET_COLUMN]]
             input_data = data.drop(columns=DROP_COLUMNS)
             return {InputTarget.INPUT: input_data, InputTarget.TARGET: targets}
@@ -148,9 +166,9 @@ class DataPreparation:
         return split_data
 
     def _do_process_data(
-        self, data: SplitDict[InputTargetDict[pd.DataFrame]]
-    ) -> tuple[SplitDict[InputTargetDict[DfOrArray]],
-               SplitDict[AddDict[DfOrArray]], ]:
+        self, data: SplitMap[InputTargetMap[pd.DataFrame]]
+    ) -> tuple[SplitMap[InputTargetMap[NDArray[np.float32]]],
+               SplitMap[AddMap[NDArray[np.float32]]]]:
         processed_data = {}
         additional_data = {}
         for key, val in data.items():
@@ -159,29 +177,21 @@ class DataPreparation:
         return processed_data, additional_data
 
     def _do_preprocess_split(
-        self, split: InputTargetDict[pd.DataFrame]
-    ) -> tuple[InputTargetDict[DfOrArray], AddDict[DfOrArray]]:
+        self, split: InputTargetMap[pd.DataFrame]
+    ) -> tuple[InputTargetMap[NDArray[np.float32]],
+               AddMap[NDArray[np.float32]]]:
         input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
         return (
             {
-                InputTarget.INPUT: input,
-                InputTarget.TARGET: targets,
+                InputTarget.INPUT: input.values,
+                InputTarget.TARGET: targets.values,
             },
-            {column: input.loc[:, [column.name]]
-             for column in Additional},
+            {
+                column: input.loc[:, [column.name]].values
+                for column in Additional
+            },
         )
-
-    def _transform_df_to_np(
-            self, data: SplitDict[dict[T, DfOrArray]]
-    ) -> SplitDict[dict[T, np.ndarray]]:
-        return {
-            split: {
-                key: val.values if isinstance(val, pd.DataFrame) else val
-                for key, val in split_data.items()
-            }
-            for split, split_data in data.items()
-        }
 
     def save_data(self) -> None:
         os.makedirs(self.save_dir, exist_ok=True)
@@ -223,8 +233,9 @@ class DataPreparation:
     ) -> tuple[Iterable[DatasetItem], ...]:
         self._try_load_preprocessed_data(splits)
 
-        def create_dataset(input_target: InputTargetDict[np.ndarray],
-                           additional: AddDict[np.ndarray]) -> DictDataset:
+        def create_dataset(
+                input_target: InputTargetMap[NDArray[np.float32]],
+                additional: AddMap[NDArray[np.float32]]) -> DictDataset:
             return DictDataset(
                 torch.tensor(input_target[InputTarget.INPUT],
                              dtype=torch.float32),
@@ -242,7 +253,7 @@ class DataPreparation:
             for split in splits
         }
 
-        dataloaders: SplitDict[Iterable[DatasetItem]]
+        dataloaders: SplitMap[Iterable[DatasetItem]]
 
         dataloaders = {
             key: DataLoader(
@@ -263,8 +274,9 @@ class GroupedDataPreparation(DataPreparation):
     def __init__(self, complete_only: bool):
         super().__init__()
         self.complete_only = complete_only
-        self.grouped_it: GIDDict[SplitDict[InputTargetDict[np.ndarray]]] = {}
-        self.grouped_add: GIDDict[SplitDict[AddDict[np.ndarray]]] = {}
+        self.grouped_it: GIDMap[SplitMap[InputTargetMap[NDArray[
+            np.float32]]]] = {}
+        self.grouped_add: GIDMap[SplitMap[AddMap[NDArray[np.float32]]]] = {}
 
     def pos_weight(self, target: int) -> float:
         self._try_load_preprocessed_data([Split.TRAIN])
@@ -284,29 +296,30 @@ class GroupedDataPreparation(DataPreparation):
 
     def prepare_data(self) -> None:
         data = self._load_input_data()
+        data = self._delete_unique_targets(data)
         data = self._make_missing_null(data)
         data = self._normalize_data(data)
         group_dict = self._group_data(data)
         for gid, group_data in group_dict.items():
             split_data = self._test_train_split(group_data)
             split_data_2 = self._input_target_split(split_data)
-            processed_data, additional_data = self._do_process_data(
-                split_data_2)
-            self.grouped_it[gid] = self._transform_df_to_np(processed_data)
-            self.grouped_add[gid] = self._transform_df_to_np(additional_data)
+            self.grouped_it[gid], self.grouped_add[
+                gid] = self._do_process_data(split_data_2)
 
-    def _group_data(self, data: pd.DataFrame) -> GIDDict[pd.DataFrame]:
+    def _group_data(self, data: pd.DataFrame) -> GIDMap[pd.DataFrame]:
         return {}
 
     def save_data(self) -> None:
         os.makedirs(self.save_dir, exist_ok=True)
 
-        def save_dict(name: str,
-                      dict: GIDDict[SplitDict[dict[T, np.ndarray]]]) -> None:
-            transposed_dict: SplitDict[GIDDict[dict[T, np.ndarray]]] = {
-                split: {}
-                for split in list(Split)
-            }
+        def save_dict(
+            name: str,
+            dict: GIDMap[SplitMap[MutableMapping[T, NDArray[np.float32]]]]
+        ) -> None:
+            transposed_dict: SplitMap[GIDMap[MutableMapping[
+                T,
+                NDArray[np.float32]]]] = {split: {}
+                                          for split in list(Split)}
             for gid, group_data in dict.items():
                 for split, sd in group_data.items():
                     transposed_dict[split][gid] = sd
@@ -331,21 +344,24 @@ class GroupedDataPreparation(DataPreparation):
                            "rb") as file:
                 data = pickle.load(file)
                 for gid, group_data in data.items():
+                    self.grouped_it.setdefault(gid, {})
                     self.grouped_it[gid][split] = group_data
 
             with gzip.open(f"{self.save_dir}/additional_{split.name}.pkl",
                            "rb") as file:
                 data = pickle.load(file)
                 for gid, group_data in data.items():
+                    self.grouped_add.setdefault(gid, {})
                     self.grouped_add[gid][split] = group_data
 
     def _try_load_preprocessed_data(self, splits: list[Split]) -> None:
-        if any([
-                split not in cast(SplitDict[Any], group_dict)
-                for group_dict in chain(self.grouped_it.values(),
-                                        self.grouped_add.values())
-                for split in splits
-        ]):
+        are_splits_loaded = [
+            split in cast(SplitMap[Any], group_dict) for group_dict in chain(
+                self.grouped_it.values(), self.grouped_add.values())
+            for split in splits
+        ]
+
+        if not all(are_splits_loaded) or len(are_splits_loaded) == 0:
             self._load_preprocessed_data(splits)
 
     def prepare_dataloaders(
@@ -356,41 +372,45 @@ class GroupedDataPreparation(DataPreparation):
     ) -> tuple[Iterable[DatasetItem], ...]:
         self._try_load_preprocessed_data(splits)
 
-        def create_datasets(data: SplitDict[InputTargetDict[np.ndarray]],
-                            gid: int) -> SplitDict[DictDataset]:
+        def create_datasets(input_target: SplitMap[InputTargetMap[NDArray[
+            np.float32]]], additional: SplitMap[AddMap[NDArray[np.float32]]],
+                            gid: int,
+                            splits: list[Split]) -> SplitMap[DictDataset]:
             return {
                 split: DictDataset(
-                    torch.tensor(split_data[InputTarget.INPUT],
+                    torch.tensor(input_target[split][InputTarget.INPUT],
                                  dtype=torch.float32),
-                    torch.tensor(split_data[InputTarget.TARGET],
+                    torch.tensor(input_target[split][InputTarget.TARGET],
                                  dtype=torch.float32),
                     **{
                         GROUP_ID_KEY:
-                        torch.full(split_data[InputTarget.TARGET].shape, gid),
+                        torch.full(
+                            input_target[split][InputTarget.TARGET].shape,
+                            gid),
                         **{
                             column.name: torch.tensor(val, dtype=torch.float32)
-                            for column, val in self.grouped_add[gid][split].items(
-                            )
-                        },
+                            for column, val in additional[split].items()
+                        }
                     },
                 )
-                for split, split_data in data.items()
+                for split in splits
             }
 
         datasets = {
-            gid: create_datasets(data, gid)
-            for gid, data in self.grouped_it.items()
+            gid: create_datasets(self.grouped_it[gid], self.grouped_add[gid],
+                                 gid, splits)
+            for gid in self.grouped_it.keys()
         }
 
-        dataloaders: SplitDict[Iterable[DatasetItem]]
+        dataloaders: SplitMap[Iterable[DatasetItem]]
 
         if self.complete_only:
             dataloaders = {
-                split: DataLoader(dataset,
+                split: DataLoader(datasets[self.COMPLETE_GROUP_ID][split],
                                   batch_size,
                                   shuffle=(split == Split.TRAIN),
                                   num_workers=num_workers)
-                for split, dataset in datasets[self.COMPLETE_GROUP_ID].items()
+                for split in splits
             }
         else:
             separate_dataloaders = {
@@ -409,7 +429,7 @@ class GroupedDataPreparation(DataPreparation):
                     (split == Split.TRAIN),
                     *[d[split] for d in separate_dataloaders.values()],
                 )
-                for split in [Split.TRAIN, Split.VAL, Split.TEST]
+                for split in splits
             }
 
         return (*dataloaders.values(), )

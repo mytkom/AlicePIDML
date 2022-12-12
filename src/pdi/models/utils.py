@@ -11,7 +11,6 @@ class NeuralNet(nn.Module):
                  activation: nn.Module,
                  dropout: Optional[float] = None):
         super(NeuralNet, self).__init__()
-        self.act = activation
         self.layers = nn.ModuleList()
         for (in_f, out_f) in zip(layers[:-2], layers[1:-1]):
             self.layers.append(nn.Linear(in_f, out_f))

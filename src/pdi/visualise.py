@@ -18,12 +18,12 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-    plt.yscale("log")
+    # plt.yscale("log")
 
     plt.title(f"{target_name} classification")
     plt.legend(loc="lower left")
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/precision_recall")
+        plt.savefig(f"{save_dir}/precision_recall.png")
     plt.show()
     plt.close()
 
@@ -40,13 +40,13 @@ def plot_purity_comparison(target_name, data_dict, save_dir=None):
             targets, preds, fP, thresholds)
 
         p = plt.plot(momenta_avg, purities_p_plot, label=method_name)
-        plt.fill_between(
-            momenta_avg,
-            confidence_intervals["purity_lower"],
-            confidence_intervals["purity_upper"],
-            color=p[0].get_color(),
-            alpha=0.1,
-        )
+        # plt.fill_between(
+        #     momenta_avg,
+        #     confidence_intervals["purity_lower"],
+        #     confidence_intervals["purity_upper"],
+        #     color=p[0].get_color(),
+        #     alpha=0.1,
+        # )
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Purity")
@@ -55,7 +55,7 @@ def plot_purity_comparison(target_name, data_dict, save_dir=None):
     plt.title(f"{target_name} classification")
     plt.legend(loc="lower left")
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/p_purity_optimized_threshold")
+        plt.savefig(f"{save_dir}/p_purity_optimized_threshold.png")
     plt.show()
     plt.close()
 
@@ -72,13 +72,13 @@ def plot_efficiency_comparison(target_name, data_dict, save_dir=None):
             targets, preds, fP, thresholds)
 
         p = plt.plot(momenta_avg, efficiencies_p_plot, label=method_name)
-        plt.fill_between(
-            momenta_avg,
-            confidence_intervals["efficiency_lower"],
-            confidence_intervals["efficiency_upper"],
-            color=p[0].get_color(),
-            alpha=0.1,
-        )
+        # plt.fill_between(
+        #     momenta_avg,
+        #     confidence_intervals["efficiency_lower"],
+        #     confidence_intervals["efficiency_upper"],
+        #     color=p[0].get_color(),
+        #     alpha=0.1,
+        # )
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Efficiency")
@@ -87,7 +87,7 @@ def plot_efficiency_comparison(target_name, data_dict, save_dir=None):
     plt.title(f"{target_name} classification")
     plt.legend(loc="lower left")
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/p_efficiency_optimized_threshold")
+        plt.savefig(f"{save_dir}/p_efficiency_optimized_threshold.png")
     plt.show()
     plt.close()
 
@@ -103,7 +103,7 @@ def plot_selected_particles(target_name,
     ybins = np.linspace(0, ybins_max, 500)
     counts, _, _ = np.histogram2d(p[selected],
                                   column_data[selected],
-                                  bins=(xbins, ybins))
+                                  bins=(xbins, ybins))  # type: ignore
     fig, ax = plt.subplots()
     ax.pcolormesh(xbins,
                   ybins,
@@ -114,13 +114,13 @@ def plot_selected_particles(target_name,
     plt.title(f"Particle:{target_name} selected")
     plt.ylabel(column_name)
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/selected_particles_{column_name}")
+        plt.savefig(f"{save_dir}/selected_particles_{column_name}.png")
     plt.show()
     plt.close()
 
     counts, _, _ = np.histogram2d(p[~selected],
                                   column_data[~selected],
-                                  bins=(xbins, ybins))
+                                  bins=(xbins, ybins))  # type: ignore
     fig, ax = plt.subplots()
     ax.pcolormesh(xbins,
                   ybins,
@@ -131,7 +131,7 @@ def plot_selected_particles(target_name,
     plt.title(f"Particle:{target_name} not selected")
     plt.ylabel(column_name)
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/not_selected_particles_{column_name}")
+        plt.savefig(f"{save_dir}/not_selected_particles_{column_name}.png")
     plt.show()
     plt.close()
 
@@ -163,6 +163,6 @@ def plot_contamination(target_name,
     plt.legend([PARTICLES_DICT[x] for x in np.unique(selected_targets)],
                loc="upper right")
     if save_dir is not None:
-        plt.savefig(f"{save_dir}/p_contamination_optimized_threshold")
+        plt.savefig(f"{save_dir}/p_contamination_optimized_threshold.png")
     plt.show()
     plt.close()

@@ -27,7 +27,7 @@ class NeuralNetEnsemble(nn.Module):
         if not torch.all(group == group[0]):
             raise Exception(
                 "Not all tensors in batch belong to the same group.")
-        return self.models[str(group.numpy()[0])](x)
+        return self.models[str(group[0].numpy()[0])](x)
 
 
 class AttentionModel(nn.Module):

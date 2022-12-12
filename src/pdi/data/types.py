@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import NewType, TypeVar, Union
+from typing import Any, MutableMapping, NewType, TypeVar, Union
 
-from numpy import ndarray
+from numpy.typing import NDArray
 from pandas import DataFrame
 from torch import Tensor
 
@@ -14,13 +14,13 @@ Additional = Enum(
 
 T = TypeVar("T")
 
-DfOrArray = Union[DataFrame, ndarray]
+DfOrArray = Union[DataFrame, NDArray[Any]]
 
-SplitDict = dict[Split, T]
-InputTargetDict = dict[InputTarget, T]
-AddDict = dict[Additional, T]
-
+SplitMap = MutableMapping[Split, T]
 GroupID = NewType("GroupID", int)
-GIDDict = dict[GroupID, T]
+GIDMap = MutableMapping[GroupID, T]
 
-DatasetItem = tuple[Tensor, Tensor, dict[str, Tensor]]
+InputTargetMap = MutableMapping[InputTarget, T]
+AddMap = MutableMapping[Additional, T]
+
+DatasetItem = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]
