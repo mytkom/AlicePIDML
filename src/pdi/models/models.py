@@ -5,6 +5,8 @@ import torch.nn as nn
 from pdi.models.pooling import AttentionPooling
 from pdi.models.utils import NeuralNet
 from torch import Tensor
+from torch.nn.functional import one_hot
+from pdi.data.constants import N_COLUMNS
 
 
 class NeuralNetEnsemble(nn.Module):
@@ -66,3 +68,24 @@ class AttentionModel(nn.Module):
         x = self.pool(x)
         x = self.net(x)
         return x
+
+    def predict(self, incomplete_tensor: Tensor) -> Tensor:
+        missing = torch.isnan(incomplete_tensor)
+        non_missing_idx = torch.argwhere(~missing)
+
+        features = one_hot(non_missing_idx, N_COLUMNS).squeeze()
+        values = incomplete_tensor[non_missing_idx]
+
+        input = torch.cat((features, values), dim=-1)
+        return self.forward(input)
+
+
+# if __name__ == "__main__":
+#     device = torch.device("cpu")
+
+#     model = torch.load(f"models/Proposed/pion.pt").to(device)
+#     dummy_input = torch.rand(N_COLUMNS)
+#     dummy_input[2] = torch.nan
+#     dummy_input[5] = torch.nan
+
+#     model.predict(dummy_input)

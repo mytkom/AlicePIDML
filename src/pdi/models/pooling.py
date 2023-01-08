@@ -51,5 +51,5 @@ class AttentionPooling(nn.Module):
 
         attention_weights = self.softmax(alpha)
         out = torch.mul(attention_weights, x)
-        out = torch.sum(out, dim=1)
+        out = torch.sum(out, dim=-2)
         return out
