@@ -1,8 +1,9 @@
-from enum import Enum
-from typing import Any, MutableMapping, NewType, TypeVar, Union
+""" This module contains the enums and other types used as keys for dictionaries in preparation classes.
+"""
 
-from numpy.typing import NDArray
-from pandas import DataFrame
+from enum import Enum
+from typing import MutableMapping, NewType
+
 from torch import Tensor
 
 Split = Enum("Split", ["TRAIN", "VAL", "TEST"])
@@ -12,15 +13,6 @@ Additional = Enum(
     ["fP", "fTPCSignal", "fBeta"],
 )
 
-T = TypeVar("T")
-
-DfOrArray = Union[DataFrame, NDArray[Any]]
-
-SplitMap = MutableMapping[Split, T]
 GroupID = NewType("GroupID", int)
-GIDMap = MutableMapping[GroupID, T]
-
-InputTargetMap = MutableMapping[InputTarget, T]
-AddMap = MutableMapping[Additional, T]
 
 DatasetItem = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]

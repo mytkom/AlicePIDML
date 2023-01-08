@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import torch
 from numpy.typing import NDArray
-from sklearn.metrics import precision_recall_curve  # type: ignore
+from sklearn.metrics import precision_recall_curve
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm

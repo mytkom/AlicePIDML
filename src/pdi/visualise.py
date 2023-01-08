@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt  # type: ignore
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
-from sklearn.metrics import precision_recall_curve  # type: ignore
+from sklearn.metrics import precision_recall_curve
 
 from pdi.constants import PARTICLES_DICT
 from pdi.evaluate import get_interval_purity_efficiency
@@ -103,7 +103,7 @@ def plot_selected_particles(target_name,
     ybins = np.linspace(0, ybins_max, 500)
     counts, _, _ = np.histogram2d(p[selected],
                                   column_data[selected],
-                                  bins=(xbins, ybins))  # type: ignore
+                                  bins=(xbins, ybins))
     fig, ax = plt.subplots()
     ax.pcolormesh(xbins,
                   ybins,
@@ -120,7 +120,7 @@ def plot_selected_particles(target_name,
 
     counts, _, _ = np.histogram2d(p[~selected],
                                   column_data[~selected],
-                                  bins=(xbins, ybins))  # type: ignore
+                                  bins=(xbins, ybins))
     fig, ax = plt.subplots()
     ax.pcolormesh(xbins,
                   ybins,

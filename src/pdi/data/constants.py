@@ -1,3 +1,6 @@
+"""This module contains project constants related to the used data.
+"""
+
 COLUMNS_TO_SCALE = [
     "fTPCSignal",
     "fTRDSignal",
