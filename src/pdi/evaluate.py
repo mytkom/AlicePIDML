@@ -60,9 +60,9 @@ def maximize_f1(targets: NDArray[np.float32],
 
 
 def get_predictions_and_data(
-    model: torch.nn.Module, test_loader: DataLoader[tuple[Tensor, Tensor,
-                                                          Dict[str, Tensor]]],
-    device: torch.device
+    model: torch.nn.Module,
+    test_loader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
+    device: torch.device,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32], Dict[
         str, NDArray[np.float32]]]:
     predictions = []
@@ -96,15 +96,18 @@ def get_predictions_and_data(
 
 
 def get_interval_predictions(
-    binary_targets: NDArray[np.int32], predictions: NDArray[np.float32],
-    p: NDArray[np.float32], thresholds: NDArray[np.float32]
+    binary_targets: NDArray[np.int32],
+    predictions: NDArray[np.float32],
+    momentum: NDArray[np.float32],
+    intervals: list[tuple[float, float]],
+    threshold: float,
 ) -> tuple[list[NDArray[np.int32]], list[NDArray[np.int32]], list[float]]:
     targets_intervals = []
     selected_intervals = []
     momenta = []
 
-    for (p_min, p_max), threshold in thresholds:
-        indices = (p < p_max) & (p >= p_min)
+    for (p_min, p_max) in intervals:
+        indices = (momentum < p_max) & (momentum >= p_min)
         targets_intervals.append(binary_targets[indices])
         selected_intervals.append(predictions[indices] > threshold)
         momenta.append((p_min + p_max) / 2)
@@ -113,15 +116,19 @@ def get_interval_predictions(
 
 
 def get_interval_purity_efficiency(
-    binary_targets: NDArray[np.int32], predictions: NDArray[np.float32],
-    momentum: NDArray[np.float32], thresholds: NDArray[np.float32]
+    binary_targets: NDArray[np.int32],
+    predictions: NDArray[np.float32],
+    momentum: NDArray[np.float32],
+    intervals: list[tuple[float, float]],
+    threshold: float,
 ) -> tuple[list[float], list[float], pd.DataFrame, list[float]]:
+
+    targets_intervals, selected_intervals, avg_momenta = get_interval_predictions(
+        binary_targets, predictions, momentum, intervals, threshold)
+
     purities_p_plot = []
     efficiencies_p_plot = []
     confidence_intervals = pd.DataFrame()
-
-    targets_intervals, selected_intervals, avg_momenta = get_interval_predictions(
-        binary_targets, predictions, momentum, thresholds)
 
     for targets, selected in zip(targets_intervals, selected_intervals):
         tp = int(np.sum(selected & targets))
@@ -149,6 +156,7 @@ def get_interval_purity_efficiency(
 def calculate_precision_recall(
         tp: int, pp: int, p: int
 ) -> tuple[float, float, tuple[float, float], tuple[float, float]]:
+
     eps = float(np.finfo(float).eps)
     precision = tp / (pp + eps)
     recall = tp / (p + eps)

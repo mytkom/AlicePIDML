@@ -18,7 +18,6 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-    # plt.yscale("log")
 
     plt.title(f"{target_name} classification")
     plt.legend(loc="lower left")
@@ -28,16 +27,19 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
     plt.close()
 
 
-def plot_purity_comparison(target_name, data_dict, save_dir=None):
+def plot_purity_comparison(target_name,
+                           data_dict,
+                           intervals,
+                           save_dir=None):  # TODO
     plt.figure()
     for method_name, results in data_dict.items():
         targets = results["targets"]
         preds = results["predictions"]
         fP = results["momentum"]
-        thresholds = results["thresholds"]
+        threshold = results["threshold"]
 
         purities_p_plot, _, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, preds, fP, thresholds)
+            targets, preds, fP, intervals, threshold)
 
         p = plt.plot(momenta_avg, purities_p_plot, label=method_name)
         plt.fill_between(
@@ -60,16 +62,19 @@ def plot_purity_comparison(target_name, data_dict, save_dir=None):
     plt.close()
 
 
-def plot_efficiency_comparison(target_name, data_dict, save_dir=None):
+def plot_efficiency_comparison(target_name,
+                               data_dict,
+                               intervals,
+                               save_dir=None):
     plt.figure()
     for method_name, results in data_dict.items():
         targets = results["targets"]
         preds = results["predictions"]
         fP = results["momentum"]
-        thresholds = results["thresholds"]
+        threshold = results["threshold"]
 
         _, efficiencies_p_plot, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, preds, fP, thresholds)
+            targets, preds, fP, intervals, threshold)
 
         p = plt.plot(momenta_avg, efficiencies_p_plot, label=method_name)
         plt.fill_between(

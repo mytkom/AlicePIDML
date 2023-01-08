@@ -1,3 +1,6 @@
+"""This module contains project constants used in the experiments.
+"""
+
 PARTICLES_DICT = {
     11: "electron",
     13: "mion",
