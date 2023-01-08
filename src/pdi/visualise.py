@@ -40,13 +40,13 @@ def plot_purity_comparison(target_name, data_dict, save_dir=None):
             targets, preds, fP, thresholds)
 
         p = plt.plot(momenta_avg, purities_p_plot, label=method_name)
-        # plt.fill_between(
-        #     momenta_avg,
-        #     confidence_intervals["purity_lower"],
-        #     confidence_intervals["purity_upper"],
-        #     color=p[0].get_color(),
-        #     alpha=0.1,
-        # )
+        plt.fill_between(
+            momenta_avg,
+            confidence_intervals["purity_lower"],
+            confidence_intervals["purity_upper"],
+            color=p[0].get_color(),
+            alpha=0.2,
+        )
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Purity")
@@ -72,13 +72,13 @@ def plot_efficiency_comparison(target_name, data_dict, save_dir=None):
             targets, preds, fP, thresholds)
 
         p = plt.plot(momenta_avg, efficiencies_p_plot, label=method_name)
-        # plt.fill_between(
-        #     momenta_avg,
-        #     confidence_intervals["efficiency_lower"],
-        #     confidence_intervals["efficiency_upper"],
-        #     color=p[0].get_color(),
-        #     alpha=0.1,
-        # )
+        plt.fill_between(
+            momenta_avg,
+            confidence_intervals["efficiency_lower"],
+            confidence_intervals["efficiency_upper"],
+            color=p[0].get_color(),
+            alpha=0.2,
+        )
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Efficiency")
