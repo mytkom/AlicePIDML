@@ -1,3 +1,18 @@
+""" This module contains the functions used to evaluate trained models.
+
+Functions
+------
+validate_one_epoch
+    Obtains model predictions on the validation set and calculates loss and prediction metrics.
+get_predictions_and_data
+    Obtains model predictions on the test set and saves additional data used for analysis.
+get_interval_purity_efficiency
+    Calculates purity and efficiency of the classifier depending on the momentum of the particle.
+calculate_precision_recall
+    Calculates precision and recall based on the number of true positives, predicted positives and positives.
+
+"""
+
 from typing import Callable, Dict
 
 import numpy as np
@@ -19,6 +34,19 @@ def validate_one_epoch(
     device: torch.device,
     loss_fun: Callable[[Tensor, Tensor], Tensor],
 ) -> tuple[float, ...]:
+    """validate_one_epoch calculates loss and prediction metrics of the model on the validation set.
+
+    Args:
+        model (torch.nn.Module): validated model
+        target_code (int): target particle that the model is trained to predict
+        validation_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]): validation set dataloader
+        device (torch.device): torch device to use for processing the data. Model has to already be on this device
+        loss_fun (Callable[[Tensor, Tensor], Tensor]): function used to calculate loss
+
+    Returns:
+        tuple[float, ...]: validation loss, f1 score, precision, recall and threshold for selecting the positive class
+    """
+
     predictions_list = []
     targets_list = []
     val_loss = 0.0
@@ -45,13 +73,13 @@ def validate_one_epoch(
     predictions = np.array(predictions_list).squeeze()
     targets = np.array(targets_list, dtype=np.float32).squeeze()
 
-    val_f1, val_prec, val_rec, var_thres = maximize_f1(targets, predictions)
+    val_f1, val_prec, val_rec, var_thres = _maximize_f1(targets, predictions)
 
     return val_loss, val_f1, val_prec, val_rec, var_thres
 
 
-def maximize_f1(targets: NDArray[np.float32],
-                predictions: NDArray[np.float32]) -> tuple[float, ...]:
+def _maximize_f1(targets: NDArray[np.float32],
+                 predictions: NDArray[np.float32]) -> tuple[float, ...]:
     precision, recall, thresholds = precision_recall_curve(
         targets, predictions)
     f1 = 2 * precision * recall / (precision + recall + np.finfo(float).eps)
@@ -65,6 +93,17 @@ def get_predictions_and_data(
     device: torch.device,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32], Dict[
         str, NDArray[np.float32]]]:
+    """get_predictions_and_data obtains model predictions on the test set and saves additional data used for analysis.
+
+    Args:
+        model (torch.nn.Module): tested model
+        test_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]): test set dataloader
+        device (torch.device): model device
+
+    Returns:
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[ str, NDArray[np.float32]]]: target array, prediction array, and a dictionary of additional data
+    """
+
     predictions = []
     targets = []
     model.eval()
@@ -95,7 +134,7 @@ def get_predictions_and_data(
     return targets_arr, predictions_arr, add_d
 
 
-def get_interval_predictions(
+def _get_interval_predictions(
     binary_targets: NDArray[np.int32],
     predictions: NDArray[np.float32],
     momentum: NDArray[np.float32],
@@ -122,8 +161,21 @@ def get_interval_purity_efficiency(
     intervals: list[tuple[float, float]],
     threshold: float,
 ) -> tuple[list[float], list[float], pd.DataFrame, list[float]]:
+    """get_interval_purity_efficiency calculates purity and efficiency metrics at different momentum intervals.
 
-    targets_intervals, selected_intervals, avg_momenta = get_interval_predictions(
+    Args:
+        binary_targets (NDArray[np.int32]): array of positive and negative classes
+        predictions (NDArray[np.float32]): array of predictions in range (0, 1)
+        momentum (NDArray[np.float32]): array of momentum values
+        intervals (list[tuple[float, float]]): momentum intevals
+        threshold (float): threshold for selecting the positive class
+
+    Returns:
+        tuple[list[float], list[float], pd.DataFrame, list[float]]: 
+            array of purities, array of efficiencies, metric confidence intervals, middle values of each interval
+    """
+
+    targets_intervals, selected_intervals, avg_momenta = _get_interval_predictions(
         binary_targets, predictions, momentum, intervals, threshold)
 
     purities_p_plot = []
@@ -156,25 +208,28 @@ def get_interval_purity_efficiency(
 def calculate_precision_recall(
         tp: int, pp: int, p: int
 ) -> tuple[float, float, tuple[float, float], tuple[float, float]]:
+    """calculate_precision_recall
 
+    Args:
+        tp (int): number of true positives
+        pp (int): number of predicted positives
+        p (int): number of actual positives
+
+    Returns:
+        tuple[float, float, tuple[float, float], tuple[float, float]]: 
+            precision, recall, precision confidence interval, recall confidence interval
+    """
     eps = float(np.finfo(float).eps)
     precision = tp / (pp + eps)
     recall = tp / (p + eps)
-    precision_ci = calculate_ci(tp, pp)
-    recall_ci = calculate_ci(tp, p)
+    precision_ci = _calculate_ci(tp, pp)
+    recall_ci = _calculate_ci(tp, p)
 
     return precision, recall, precision_ci, recall_ci
 
 
-def calculate_ci(tp: int, n: int) -> tuple[float, float]:
-    """Estimates confidence interval for Bernoulli p
-    Args:
-      tp: number of positive outcomes, TP in this case
-      n: number of attemps, TP+FP for Precision, TP+FN for Recall
-      alpha: confidence level
-    Returns:
-      tuple[float, float]: lower and upper bounds of the confidence interval
-    """
+def _calculate_ci(tp: int, n: int) -> tuple[float, float]:
+    #Estimate confidence interval for Bernoulli p
     eps = float(np.finfo(float).eps)
 
     p_hat = float(tp) / (n + eps)

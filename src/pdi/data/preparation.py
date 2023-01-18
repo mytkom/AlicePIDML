@@ -49,18 +49,13 @@ class DeletePreparation(DataPreparation):
     def _do_preprocess_split(self, split):
         input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
+
         na_rows = input[input.isnull().any(axis=1)].index
 
-        input = input.drop(index=na_rows)
-        targets = targets.drop(index=na_rows)
+        split[InputTarget.INPUT] = input.drop(index=na_rows)
+        split[InputTarget.TARGET] = targets.drop(index=na_rows)
 
-        return ({
-            InputTarget.INPUT: input.values,
-            InputTarget.TARGET: targets.values
-        }, {
-            column: input.loc[:, [column.name]].values
-            for column in Additional
-        })
+        return super()._do_preprocess_split(split)
 
 
 class MeanImputation(DataPreparation):
@@ -86,21 +81,13 @@ class MeanImputation(DataPreparation):
                 "Use DeletePreparation to only get complete cases.")
 
     def _do_process_data(self, data):
-
         self._mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
-
-        input = split[InputTarget.INPUT].fillna(self._mean_df)
-        targets = split[InputTarget.TARGET]
-        return ({
-            InputTarget.INPUT: input.values,
-            InputTarget.TARGET: targets.values
-        }, {
-            column: input.loc[:, [column.name]].values
-            for column in Additional
-        })
+        split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(
+            self._mean_df)
+        return super()._do_preprocess_split(split)
 
     def save_data(self) -> None:
         """save_data overrides base method. Additionally saves the mean values used in imputation. 
