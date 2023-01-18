@@ -1,6 +1,7 @@
 data/processed/*
 data/raw/*
 models/*
+onnx/*
 reports/*
 **/__pycache__
 wandb

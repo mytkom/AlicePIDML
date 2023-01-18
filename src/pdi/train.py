@@ -4,7 +4,7 @@ import wandb
 from tqdm import tqdm
 
 from pdi.data.constants import GROUP_ID_KEY
-from pdi.evaluate import validate_one_epoch
+from pdi.evaluate import validate_model
 
 
 def train_one_epoch(model, target_code, train_loader, device, optimizer,
@@ -48,7 +48,7 @@ def train(model, target_code, device, train_loader, val_loader, pos_weight):
     for epoch in range(wandb.config.max_epochs):
         train_one_epoch(model, target_code, train_loader, device, optimizer,
                         loss_fun)
-        val_loss, val_f1, val_prec, val_rec, val_thres = validate_one_epoch(
+        val_loss, val_f1, val_prec, val_rec, val_thres = validate_model(
             model, target_code, val_loader, device, loss_fun)
         model.thres = val_thres
         scheduler.step()

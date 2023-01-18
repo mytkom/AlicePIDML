@@ -2,10 +2,8 @@
 
 Functions
 ------
-validate_one_epoch
-    Obtains model predictions on the validation set and calculates loss and prediction metrics.
-get_predictions_and_data
-    Obtains model predictions on the test set and saves additional data used for analysis.
+get_predictions_loss_and_data
+validate_model
 get_interval_purity_efficiency
     Calculates purity and efficiency of the classifier depending on the momentum of the particle.
 calculate_precision_recall
@@ -25,104 +23,53 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from pdi.data.constants import GROUP_ID_KEY
+from pdi.data.types import Additional
 
 
-def validate_one_epoch(
+def get_predictions_data_and_loss(
     model: torch.nn.Module,
-    target_code: int,
-    validation_loader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
+    dataloader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
     device: torch.device,
-    loss_fun: Callable[[Tensor, Tensor], Tensor],
-) -> tuple[float, ...]:
-    """validate_one_epoch calculates loss and prediction metrics of the model on the validation set.
+    loss_fun: Callable[[Tensor, Tensor], Tensor] = None,
+    target_code: int = None,
+) -> tuple[NDArray[np.float32], NDArray[np.float32], float]:
+    """get_predictions_loss_and_data returns all information in a dataloader in combined numpy arrays.
 
     Args:
-        model (torch.nn.Module): validated model
-        target_code (int): target particle that the model is trained to predict
-        validation_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]): validation set dataloader
-        device (torch.device): torch device to use for processing the data. Model has to already be on this device
-        loss_fun (Callable[[Tensor, Tensor], Tensor]): function used to calculate loss
+        model (torch.nn.Module):
+        dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]):
+        device (torch.device):
+        loss_fun (Callable[[Tensor, Tensor], Tensor], optional). Defaults to None.
+        target_code (int, optional). Defaults to None.
 
     Returns:
-        tuple[float, ...]: validation loss, f1 score, precision, recall and threshold for selecting the positive class
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float]: 
+            array of predictions, array of targets, dictionary of additional data for analysis, loss value
     """
-
-    predictions_list = []
-    targets_list = []
+    predictions = []
+    targets = []
+    additional_data = {}
     val_loss = 0.0
 
     model.eval()
     with torch.no_grad():
-        for input_data, target, data_dict in tqdm(validation_loader):
-            input_data = input_data.to(device)
-            binary_target = (target == target_code).type(
-                torch.float).to(device)
-
-            group_id = data_dict.get(GROUP_ID_KEY)
-            if group_id is None:
-                out = model(input_data)
-            else:
-                out = model(input_data, group_id)
-
-            val_loss += loss_fun(out, binary_target).item()
-            predict_target = torch.sigmoid(out)
-
-            targets_list.extend(binary_target.cpu().numpy())
-            predictions_list.extend(predict_target.cpu().detach().numpy())
-
-    predictions = np.array(predictions_list).squeeze()
-    targets = np.array(targets_list, dtype=np.float32).squeeze()
-
-    val_f1, val_prec, val_rec, var_thres = _maximize_f1(targets, predictions)
-
-    return val_loss, val_f1, val_prec, val_rec, var_thres
-
-
-def _maximize_f1(targets: NDArray[np.float32],
-                 predictions: NDArray[np.float32]) -> tuple[float, ...]:
-    precision, recall, thresholds = precision_recall_curve(
-        targets, predictions)
-    f1 = 2 * precision * recall / (precision + recall + np.finfo(float).eps)
-    argmax = np.argmax(f1)
-    return f1[argmax], precision[argmax], recall[argmax], thresholds[argmax]
-
-
-def get_predictions_and_data(
-    model: torch.nn.Module,
-    test_loader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
-    device: torch.device,
-) -> tuple[NDArray[np.float32], NDArray[np.float32], Dict[
-        str, NDArray[np.float32]]]:
-    """get_predictions_and_data obtains model predictions on the test set and saves additional data used for analysis.
-
-    Args:
-        model (torch.nn.Module): tested model
-        test_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]): test set dataloader
-        device (torch.device): model device
-
-    Returns:
-        tuple[NDArray[np.float32], NDArray[np.float32], Dict[ str, NDArray[np.float32]]]: target array, prediction array, and a dictionary of additional data
-    """
-
-    predictions = []
-    targets = []
-    model.eval()
-
-    with torch.no_grad():
-        additional_data: Dict[str, list[NDArray[np.float32]]] = {}
-        for input_data, target, data_dict in tqdm(test_loader):
-
+        for input_data, target, data_dict in tqdm(dataloader):
+            #prediction
             input_data = input_data.to(device)
             group_id = data_dict.get(GROUP_ID_KEY)
             if group_id is None:
                 out = model(input_data)
             else:
                 out = model(input_data, group_id)
+            #loss
+            if loss_fun and target_code:
+                binary_target = (target == target_code).type(
+                    torch.float).to(device)
+                val_loss += loss_fun(out, binary_target).item()
+            #save data
             predict_target = torch.sigmoid(out)
-
-            targets.extend(target.numpy())
             predictions.extend(predict_target.cpu().detach().numpy())
-
+            targets.extend(target.cpu().numpy())
             for k, v in data_dict.items():
                 if k not in additional_data:
                     additional_data[k] = []
@@ -130,16 +77,55 @@ def get_predictions_and_data(
 
     predictions_arr = np.array(predictions).squeeze()
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
-    add_d = {k: np.array(v).squeeze() for k, v in additional_data.items()}
-    return targets_arr, predictions_arr, add_d
+    dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
+
+    return predictions_arr, targets_arr, dict_arr, val_loss
 
 
-def _get_interval_predictions(
+def validate_model(
+    model: torch.nn.Module,
+    target_code: int,
+    validation_loader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
+    device: torch.device,
+    loss_fun: Callable[[Tensor, Tensor], Tensor],
+) -> tuple[float, ...]:
+    """validate_model calculates loss and prediction metrics of the model on the validation set.
+
+    Args:
+        model (torch.nn.Module)
+        target_code (int)
+        validation_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]])
+        device (torch.device)
+        loss_fun (Callable[[Tensor, Tensor], Tensor])
+
+    Returns:
+        tuple[float, ...]: validation loss, f1 score, precision, recall, and threshold for selecting the positive class
+    """
+
+    predictions, targets, _, val_loss = get_predictions_data_and_loss(
+        model, validation_loader, device, loss_fun, target_code)
+    binary_targets = (targets == target_code)
+
+    val_f1, val_prec, val_rec, var_thres = _maximize_f1(
+        binary_targets, predictions)
+
+    return val_loss, val_f1, val_prec, val_rec, var_thres
+
+
+def _maximize_f1(binary_targets: NDArray[np.float32],
+                 predictions: NDArray[np.float32]) -> tuple[float, ...]:
+    precision, recall, thresholds = precision_recall_curve(
+        binary_targets, predictions)
+    f1 = 2 * precision * recall / (precision + recall + np.finfo(float).eps)
+    argmax = np.argmax(f1)
+    return f1[argmax], precision[argmax], recall[argmax], thresholds[argmax]
+
+
+def _split_particles_intervals(
     binary_targets: NDArray[np.int32],
-    predictions: NDArray[np.float32],
+    selected: NDArray[np.int32],
     momentum: NDArray[np.float32],
     intervals: list[tuple[float, float]],
-    threshold: float,
 ) -> tuple[list[NDArray[np.int32]], list[NDArray[np.int32]], list[float]]:
     targets_intervals = []
     selected_intervals = []
@@ -148,7 +134,7 @@ def _get_interval_predictions(
     for (p_min, p_max) in intervals:
         indices = (momentum < p_max) & (momentum >= p_min)
         targets_intervals.append(binary_targets[indices])
-        selected_intervals.append(predictions[indices] > threshold)
+        selected_intervals.append(selected[indices])
         momenta.append((p_min + p_max) / 2)
 
     return targets_intervals, selected_intervals, momenta
@@ -156,27 +142,25 @@ def _get_interval_predictions(
 
 def get_interval_purity_efficiency(
     binary_targets: NDArray[np.int32],
-    predictions: NDArray[np.float32],
+    selected: NDArray[np.int32],
     momentum: NDArray[np.float32],
     intervals: list[tuple[float, float]],
-    threshold: float,
 ) -> tuple[list[float], list[float], pd.DataFrame, list[float]]:
     """get_interval_purity_efficiency calculates purity and efficiency metrics at different momentum intervals.
 
     Args:
-        binary_targets (NDArray[np.int32]): array of positive and negative classes
-        predictions (NDArray[np.float32]): array of predictions in range (0, 1)
+        binary_targets (NDArray[np.int32]): array of positive and negative targets
+        selected (NDArray[np.float32]): array of predicted classes
         momentum (NDArray[np.float32]): array of momentum values
         intervals (list[tuple[float, float]]): momentum intevals
-        threshold (float): threshold for selecting the positive class
 
     Returns:
         tuple[list[float], list[float], pd.DataFrame, list[float]]: 
-            array of purities, array of efficiencies, metric confidence intervals, middle values of each interval
+            array of purities, array of efficiencies, confidence intervals, middle values of each interval
     """
 
-    targets_intervals, selected_intervals, avg_momenta = _get_interval_predictions(
-        binary_targets, predictions, momentum, intervals, threshold)
+    targets_intervals, selected_intervals, avg_momenta = _split_particles_intervals(
+        binary_targets, selected, momentum, intervals)
 
     purities_p_plot = []
     efficiencies_p_plot = []

@@ -43,8 +43,10 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
         fP = results["momentum"]
         threshold = results["threshold"]
 
+        selected = preds > threshold
+
         purities_p_plot, _, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, preds, fP, intervals, threshold)
+            targets, selected, fP, intervals)
 
         p = plt.plot(momenta_avg, purities_p_plot, label=method_name)
         plt.fill_between(
@@ -78,8 +80,10 @@ def plot_efficiency_comparison(target_name,
         fP = results["momentum"]
         threshold = results["threshold"]
 
+        selected = preds > threshold
+
         _, efficiencies_p_plot, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, preds, fP, intervals, threshold)
+            targets, selected, fP, intervals)
 
         p = plt.plot(momenta_avg, efficiencies_p_plot, label=method_name)
         plt.fill_between(
