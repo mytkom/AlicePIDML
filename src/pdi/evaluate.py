@@ -52,7 +52,8 @@ def get_predictions_data_and_loss(
     val_loss = 0.0
 
     model.eval()
-    with torch.no_grad():
+    for i in range(1):
+    # with torch.no_grad():
         for input_data, target, data_dict in tqdm(dataloader):
             #prediction
             input_data = input_data.to(device)

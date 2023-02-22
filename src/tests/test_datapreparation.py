@@ -1,11 +1,13 @@
 import unittest
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 from pandas.util.testing import assert_almost_equal, assert_equal
 from pdi.data.constants import (COLUMNS_TO_SCALE, MISSING_VALUES,
-                                TARGET_COLUMN, TEST_SIZE, TRAIN_SIZE)
-from pdi.data.types import Split
+                                TARGET_COLUMN, TEST_SIZE, TRAIN_SIZE,
+                                DROP_COLUMNS)
+from pdi.data.types import Split, Additional, InputTarget
 from pdi.data.utils import DataPreparation
 
 
@@ -13,6 +15,20 @@ class TestDataPreparation(unittest.TestCase):
 
     def setUp(self):
         self.prep = DataPreparation()
+
+        columns = COLUMNS_TO_SCALE + list(MISSING_VALUES.keys(
+        )) + DROP_COLUMNS + [i.name for i in Additional]
+        columns.remove(TARGET_COLUMN)
+
+        self.mock_data = pd.DataFrame({
+            **{
+                TARGET_COLUMN: [0] * 800 + [1] * 200,
+            },
+            **{c: 10 * np.random.rand((1000)) + 20
+               for c in columns}
+        })
+
+        self.input_size = len(self.mock_data.columns) - len(DROP_COLUMNS)
 
     def test_delete_unique_targets(self):
         targets = [1] * 80 + [2] * 1000
@@ -80,14 +96,41 @@ class TestDataPreparation(unittest.TestCase):
             self.assertAlmostEqual(ratio, 4.0)
 
     def test_it_split(self):
-        pass
+        tt_split = self.prep._test_train_split(self.mock_data)
+        it_split = self.prep._input_target_split(tt_split)
+
+        for data in it_split.values():
+            input_data = data[InputTarget.INPUT]
+            target_data = data[InputTarget.TARGET]
+
+            self.assertEqual([TARGET_COLUMN], target_data.columns)
+            for c in DROP_COLUMNS:
+                self.assertNotIn(c, input_data.columns)
+            self.assertEqual(len(input_data.columns), self.input_size)
 
     def test_process(self):
-        pass
+        data = self.prep._test_train_split(self.mock_data)
+        data = self.prep._input_target_split(data)
+        _, additional_data = self.prep._do_process_data(data)
+        for s in Split:
+            self.assertEqual(list(additional_data[s].keys()), list(Additional))
 
     def test_dataloaders(self):
-        pass
+        self.prep._load_input_data = Mock(return_value=self.mock_data)
+        self.prep.prepare_data()
+        (loader, ) = self.prep.prepare_dataloaders(64, 0, [Split.TRAIN])
+        input_batch, target_batch, additional_dict = next(iter(loader))
+
+        self.assertEqual(input_batch.size(), (64, self.input_size))
+        self.assertEqual(target_batch.size(), (64, 1))
+        self.assertEqual(list(additional_dict.keys()),
+                         [i.name for i in Additional])
+
+        for key, val in additional_dict.items():
+            self.assertEqual(val.size(), (64, 1))
 
     def test_posweight(self):
-        pass
-        self.assertEqual(self.prep.pos_weight(), 3)
+        self.prep._load_input_data = Mock(return_value=self.mock_data)
+        self.prep.prepare_data()
+
+        self.assertEqual(self.prep.pos_weight(1), 4)

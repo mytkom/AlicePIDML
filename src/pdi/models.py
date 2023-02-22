@@ -166,14 +166,3 @@ class AttentionModel(nn.Module):
 
         input = torch.cat((features, values), dim=-1)
         return self.forward(input)
-
-
-# if __name__ == "__main__":
-#     device = torch.device("cpu")
-
-#     model = torch.load(f"models/Proposed/pion.pt").to(device)
-#     dummy_input = torch.rand(N_COLUMNS)
-#     dummy_input[2] = torch.nan
-#     dummy_input[5] = torch.nan
-
-#     model.predict(dummy_input)
