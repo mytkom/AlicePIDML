@@ -28,17 +28,17 @@ from pdi.data.types import Additional
 
 
 def get_nsigma_predictions_data(
-    dataloader: DataLoader[Tuple[Tensor, Tensor, Dict[str, Tensor]]],
+    dataloader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
     target_code: int,
-) -> Tuple[NDArray[np.float32], NDArray[np.float32], float]:
+) -> tuple[NDArray[np.float32], NDArray[np.float32], float]:
     """get_nsigma_predictions_data returns all information in a dataloader in combined numpy arrays.
 
     Args:
-        dataloader (DataLoader[Tuple[Tensor, Tensor, Dict[str, Tensor]]]):
+        dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]):
         target_code (int, optional). Defaults to None.
 
     Returns:
-        Tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]]]:
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]]]:
             array of predictions, array of targets, dictionary of additional data for analysis
     """
     predictions = []
