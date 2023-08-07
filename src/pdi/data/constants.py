@@ -16,11 +16,10 @@ COLUMNS_TO_SCALE = [
 ]
 CSV_DELIMITER = ","
 DROP_COLUMNS = ["fPdgCode", "fIsPhysicalPrimary", "P"]
-INPUT_PATH = "data/raw/train_399_mc_multiple_detectors.csv"
+INPUT_PATH = "data/raw/train_246_mc_multiple_detectors.csv"
 MISSING_VALUES = {
     "fBeta": -999,
     "fTRDPattern": 0,
-    "fTRDPattern": -999,
 }
 N_COLUMNS = 19
 PROCESSED_DIR = "data/processed"
