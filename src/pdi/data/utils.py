@@ -22,8 +22,9 @@ import numpy as np
 import pandas as pd
 import torch
 from pdi.data.constants import (COLUMNS_TO_SCALE, CSV_DELIMITER, DROP_COLUMNS,
-                                GROUP_ID_KEY, INPUT_PATH, MISSING_VALUES, SEED,
-                                TARGET_COLUMN, TEST_SIZE, TRAIN_SIZE)
+                                GROUP_ID_KEY, INPUT_PATH, MISSING_VALUES,
+                                PROCESSED_DIR, SEED, TARGET_COLUMN, TEST_SIZE,
+                                TRAIN_SIZE)
 from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
 from sklearn.model_selection import train_test_split
 from torch import Tensor
@@ -108,7 +109,7 @@ class DataPreparation:
         save_data: save preprocessed data.
         prepare_dataloaders: create dataloaders from preprocessed data.
     """
-    save_dir: str
+    save_dir = f"{PROCESSED_DIR}/basic"
 
     def __init__(self) -> None:
         self._scaling_params = pd.DataFrame(columns=["column", "mean", "std"])

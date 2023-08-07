@@ -166,3 +166,6 @@ class AttentionModel(nn.Module):
 
         input = torch.cat((features, values), dim=-1)
         return self.forward(input)
+
+class Traditional:
+    pass

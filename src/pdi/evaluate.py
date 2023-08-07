@@ -23,7 +23,67 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from pdi.data.constants import GROUP_ID_KEY
+from pdi.constants import PART_DICT
 from pdi.data.types import Additional
+
+
+def get_nsigma_predictions_data(
+    dataloader: DataLoader[Tuple[Tensor, Tensor, Dict[str, Tensor]]],
+    target_code: int,
+) -> Tuple[NDArray[np.float32], NDArray[np.float32], float]:
+    """get_nsigma_predictions_data returns all information in a dataloader in combined numpy arrays.
+
+    Args:
+        dataloader (DataLoader[Tuple[Tensor, Tensor, Dict[str, Tensor]]]):
+        target_code (int, optional). Defaults to None.
+
+    Returns:
+        Tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]]]:
+            array of predictions, array of targets, dictionary of additional data for analysis
+    """
+    predictions = []
+    targets = []
+    additional_data = {}
+
+    def nsigma_check(pt: float, nsigma_tpc: float, nsigma_tof) -> float:
+        """
+        Hardcoded selections from IML slides, past PID ML articles.
+
+        Args:
+            pt (float)
+            nsigma_tpc (float)
+            nsigma_tof (float)
+
+        Returns:
+            float: sigma function for given pt and TPC, TOF nsigmas.
+        """
+        if pt <= 0.5:
+            return abs(nsigma_tpc)
+        return np.sqrt(pow(nsigma_tpc, 2) + pow(nsigma_tof, 2)) < 3.0
+
+    nsigma_tpc_col = "fTpcNSigma" + PART_DICT[abs(target_code)]
+    nsigma_tof_col = "fTofNSigma" + PART_DICT[abs(target_code)]
+    for input_data, target, data_dict in tqdm(dataloader):
+
+        print(f"From dataloader: data_dict {data_dict}")
+        print(input_data)
+        print(target)
+
+        for sample in input_data:
+            nsigma_val = nsigma_check(sample["fPt"], sample[nsigma_tpc_col],
+                                          sample[nsigma_tof_col])
+            predictions.append(nsigma_val)
+            targets.extend(target.numpy())
+            for k, v in data_dict.items():
+                if k not in additional_data:
+                    additional_data[k] = []
+                additional_data[k].extend(v.numpy())
+
+    predictions_arr = np.array(predictions, dtype=np.bool)
+    targets_arr = np.array(targets, dtype=np.float32).squeeze()
+    dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
+
+    return predictions_arr, targets_arr, dict_arr
 
 
 def get_predictions_data_and_loss(
