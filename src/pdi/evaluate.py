@@ -45,41 +45,27 @@ def get_nsigma_predictions_data(
     targets = []
     additional_data = {}
 
-    def nsigma_check(pt: float, nsigma_tpc: float, nsigma_tof) -> float:
-        """
-        Hardcoded selections from IML slides, past PID ML articles.
-
-        Args:
-            pt (float)
-            nsigma_tpc (float)
-            nsigma_tof (float)
-
-        Returns:
-            float: sigma function for given pt and TPC, TOF nsigmas.
-        """
-        if pt <= 0.5:
-            return abs(nsigma_tpc)
-        return np.sqrt(pow(nsigma_tpc, 2) + pow(nsigma_tof, 2)) < 3.0
-
-    nsigma_tpc_col = "fTpcNSigma" + PART_DICT[abs(target_code)]
-    nsigma_tof_col = "fTofNSigma" + PART_DICT[abs(target_code)]
+    nsigma_tpc_col = "fTPCNSigma" + PART_DICT[abs(target_code)]
+    nsigma_tof_col = "fTOFNSigma" + PART_DICT[abs(target_code)]
     for input_data, target, data_dict in tqdm(dataloader):
 
         print(f"From dataloader: data_dict {data_dict}")
         print(input_data)
         print(target)
 
-        for sample in input_data:
-            nsigma_val = nsigma_check(sample["fPt"], sample[nsigma_tpc_col],
-                                          sample[nsigma_tof_col])
-            predictions.append(nsigma_val)
-            targets.extend(target.numpy())
-            for k, v in data_dict.items():
-                if k not in additional_data:
-                    additional_data[k] = []
-                additional_data[k].extend(v.numpy())
+        nsigmas = abs(data_dict[nsigma_tpc_col]).where(data_dict["fPt"] <= 0.5)
+        nsigmas[data_dict["fPt"] > 0.5] = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
+                                                 pow(data_dict[nsigma_tof_col], 2)) \
+                                                 .where(data_dict["fPt"] > 0.5)
 
-    predictions_arr = np.array(predictions, dtype=np.bool)
+        predictions.extend(nsigmas)
+        targets.extend(target.numpy())
+        for k, v in data_dict.items():
+            if k not in additional_data:
+                additional_data[k] = []
+            additional_data[k].extend(v.numpy())
+
+    predictions_arr = np.array(predictions, dtype=np.bool).squeeze()
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
     dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
 

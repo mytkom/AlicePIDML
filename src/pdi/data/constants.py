@@ -15,8 +15,8 @@ COLUMNS_TO_SCALE = [
     "fDcaZ",
 ]
 CSV_DELIMITER = ","
-DROP_COLUMNS = ["fPdgCode", "fIsPhysicalPrimary", "P"]
-INPUT_PATH = "data/raw/train_246_mc_multiple_detectors.csv"
+DROP_COLUMNS = ["fPdgCode", "fIsPhysicalPrimary"]
+INPUT_PATH = "../PID_in_O2/LHC18g4_train246_mc_multiple_detectors.csv"
 MISSING_VALUES = {
     "fBeta": -999,
     "fTRDPattern": 0,

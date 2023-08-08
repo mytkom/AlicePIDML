@@ -6,11 +6,15 @@ from typing import MutableMapping, NewType
 
 from torch import Tensor
 
+from pdi.constants import PART_DICT, TARGET_CODES
+
 Split = Enum("Split", ["TRAIN", "VAL", "TEST"])
 InputTarget = Enum("InputTarget", ["INPUT", "TARGET"])
 Additional = Enum(
     "Additional",
-    ["fP", "fTPCSignal", "fBeta"],
+    ["fP", "fTPCSignal", "fBeta", "fPt",
+     *["fTPCNSigma" + val for val in PART_DICT.values()],
+     *["fTOFNSigma" + val for val in PART_DICT.values()]],
 )
 
 GroupID = NewType("GroupID", int)
