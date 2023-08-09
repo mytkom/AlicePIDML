@@ -34,8 +34,8 @@ def get_nsigma_predictions_data(
     """get_nsigma_predictions_data returns all information in a dataloader in combined numpy arrays.
 
     Args:
-        dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]):
-        target_code (int, optional). Defaults to None.
+        dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]])
+        target_code (int, optional)
 
     Returns:
         tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]]]:
@@ -48,24 +48,19 @@ def get_nsigma_predictions_data(
     nsigma_tpc_col = "fTPCNSigma" + PART_DICT[abs(target_code)]
     nsigma_tof_col = "fTOFNSigma" + PART_DICT[abs(target_code)]
     for input_data, target, data_dict in tqdm(dataloader):
+        nsigmas = abs(data_dict[nsigma_tpc_col])
+        nsigmas = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
+                          pow(data_dict[nsigma_tof_col], 2)) \
+                  .where(data_dict["fPt"] > 0.5, nsigmas)
 
-        print(f"From dataloader: data_dict {data_dict}")
-        print(input_data)
-        print(target)
-
-        nsigmas = abs(data_dict[nsigma_tpc_col]).where(data_dict["fPt"] <= 0.5)
-        nsigmas[data_dict["fPt"] > 0.5] = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
-                                                 pow(data_dict[nsigma_tof_col], 2)) \
-                                                 .where(data_dict["fPt"] > 0.5)
-
-        predictions.extend(nsigmas)
+        predictions.extend(nsigmas.cpu().detach().numpy())
         targets.extend(target.numpy())
         for k, v in data_dict.items():
             if k not in additional_data:
                 additional_data[k] = []
             additional_data[k].extend(v.numpy())
 
-    predictions_arr = np.array(predictions, dtype=np.bool).squeeze()
+    predictions_arr = np.array(predictions, dtype=np.float32).squeeze()
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
     dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
 
