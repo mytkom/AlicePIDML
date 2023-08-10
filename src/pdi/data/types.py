@@ -6,7 +6,7 @@ from typing import MutableMapping, NewType
 
 from torch import Tensor
 
-from pdi.constants import PART_DICT, TARGET_CODES
+from pdi.data.constants import PART_DICT
 
 Split = Enum("Split", ["TRAIN", "VAL", "TEST"])
 InputTarget = Enum("InputTarget", ["INPUT", "TARGET"])

@@ -22,8 +22,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from pdi.data.constants import GROUP_ID_KEY
-from pdi.constants import PART_DICT
+from pdi.data.constants import GROUP_ID_KEY, PART_DICT
 from pdi.data.types import Additional
 
 

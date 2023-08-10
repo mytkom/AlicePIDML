@@ -14,14 +14,6 @@ PARTICLES_DICT = {
     -2212: "antiproton",
 }
 
-PART_DICT = {
-    11: "El",
-    13: "Mu",
-    211: "Pi",
-    321: "Ka",
-    2212: "Pr",
-}
-
 TARGET_CODES = [211, 2212, 321, -211, -2212, -321]
 P_RANGE = [0, 5]
 P_RESOLUTION = 20
