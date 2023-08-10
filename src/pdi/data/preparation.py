@@ -18,7 +18,9 @@ import json
 
 import numpy as np
 import pandas as pd
-from pdi.data.constants import DROP_COLUMNS, N_COLUMNS, PROCESSED_DIR
+from pdi.data.constants import (DROP_COLUMNS_SMALL, DROP_COLUMNS_BIG,
+                                N_COLUMNS_BIG, N_COLUMNS_SMALL,
+                                N_COLUMNS, PROCESSED_DIR)
 from pdi.data.types import Additional, GroupID, InputTarget, Split
 from pdi.data.utils import DataPreparation, GroupedDataPreparation
 from sklearn.linear_model import LinearRegression
@@ -175,7 +177,8 @@ class EnsemblePreparation(GroupedDataPreparation):
 
     def _group_data(self, data):
         missing = data.isnull()
-        groups = missing.groupby(list(missing.columns.drop(DROP_COLUMNS)),
+        drop_columns = DROP_COLUMNS_BIG if len(data.columns) == N_COLUMNS_BIG else DROP_COLUMNS_SMALL
+        groups = missing.groupby(list(missing.columns.drop(drop_columns)),
                                  dropna=False).groups
         return {
             GroupID(np.sum(2**np.arange(len(key)) * ~np.array(key))):
