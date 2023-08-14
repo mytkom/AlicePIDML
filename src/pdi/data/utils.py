@@ -23,8 +23,9 @@ import pandas as pd
 import torch
 from pdi.data.constants import (COLUMNS_TO_SCALE, CSV_DELIMITER, DROP_COLUMNS_SMALL,
                                 DROP_COLUMNS_BIG, N_COLUMNS_BIG, N_COLUMNS_SMALL,
-                                GROUP_ID_KEY, INPUT_PATH, MISSING_VALUES, PROCESSED_DIR,
-                                SEED, TARGET_COLUMN, TEST_SIZE, TRAIN_SIZE)
+                                N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS, GROUP_ID_KEY, INPUT_PATH,
+                                MISSING_VALUES, PROCESSED_DIR, SEED, TARGET_COLUMN,
+                                TEST_SIZE, TRAIN_SIZE)
 from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
 from sklearn.model_selection import train_test_split
 from torch import Tensor
@@ -111,11 +112,10 @@ class DataPreparation:
     """
     save_dir = f"{PROCESSED_DIR}/basic"
 
-    def __init__(self, traditional: bool = False) -> None:
+    def __init__(self) -> None:
         self._scaling_params = pd.DataFrame(columns=["column", "mean", "std"])
         self._input_target = {}
         self._additional = {}
-        self.traditional = traditional
 
     def pos_weight(self, target: int) -> float:
         """pos_weight returns the ratio between the negative and positive samples in the train split.
@@ -204,13 +204,13 @@ class DataPreparation:
 
         def do_split(data):
             targets = data.loc[:, [TARGET_COLUMN]]
-            if self.traditional or len(data.columns) == N_COLUMNS_BIG:
+            if len(data.columns) == N_COLUMNS_BIG:
                 input_data = data.drop(columns=DROP_COLUMNS_BIG)
             elif len(data.columns) == N_COLUMNS_SMALL:
                 input_data = data.drop(columns=DROP_COLUMNS_SMALL)
             else:
                 raise ValueError("The input table has invalid number of columns. Was the PID ML producer updated?")
-            return {inputtarget.input: input_data, inputtarget.target: targets}
+            return {InputTarget.INPUT: input_data, InputTarget.TARGET: targets}
 
         split_data = {}
         for key, val in data.items():
@@ -229,15 +229,18 @@ class DataPreparation:
     def _do_preprocess_split(self, split):
         input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
+        add_dict = {column: input.loc[:, [column.name]].values
+                    for column in Additional}
+        if len(input.columns) == N_COLUMNS_NSIGMAS:
+            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+            col = len(input.columns)
+            print(f"Columns in input after dropping nsigmas: {col}")
         return (
             {
                 InputTarget.INPUT: input.values,
                 InputTarget.TARGET: targets.values,
             },
-            {
-                column: input.loc[:, [column.name]].values
-                for column in Additional
-            },
+            add_dict,
         )
 
     def save_data(self) -> None:

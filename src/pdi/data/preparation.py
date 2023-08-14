@@ -20,7 +20,8 @@ import numpy as np
 import pandas as pd
 from pdi.data.constants import (DROP_COLUMNS_SMALL, DROP_COLUMNS_BIG,
                                 N_COLUMNS_BIG, N_COLUMNS_SMALL,
-                                N_COLUMNS, PROCESSED_DIR)
+                                N_COLUMNS, N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS,
+                                PROCESSED_DIR)
 from pdi.data.types import Additional, GroupID, InputTarget, Split
 from pdi.data.utils import DataPreparation, GroupedDataPreparation
 from sklearn.linear_model import LinearRegression
@@ -126,18 +127,23 @@ class RegressionImputation(DataPreparation):
 
         self.missing_features = train_input.isnull().any()
         complete = train_input.dropna()
-        self._regression.fit(complete.loc[:, ~self.missing_features],
+        self._regression.fit(complete.loc[:, ~self.missing_features &
+                                             (complete.columns != NSIGMA_COLUMNS)],
                              complete.loc[:, self.missing_features])
         self.regression_params = {
             "missing": list(train_input.columns[self.missing_features]),
-            "non_missing": list(train_input.columns[~self.missing_features]),
+            "non_missing": list(train_input.columns[~self.missing_features &
+                                                    (train_input.columns != NSIGMA_COLUMNS)]),
             "coef": self._regression.coef_.tolist(),
         }
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
-
         input = split[InputTarget.INPUT]
+        if len(input.columns) == N_COLUMNS_NSIGMAS:
+            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+            col = len(input.columns)
+            print(f"Columns in regression input after dropping nsigmas: {col}")
         targets = split[InputTarget.TARGET]
         pred = self._regression.predict(input.loc[:, ~self.missing_features])
         pred = pd.DataFrame(pred,
@@ -187,8 +193,11 @@ class EnsemblePreparation(GroupedDataPreparation):
         }
 
     def _do_preprocess_split(self, split):
-
         input_data = split[InputTarget.INPUT]
+        if len(input.columns) == N_COLUMNS_NSIGMAS:
+            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+            col = len(input.columns)
+            print(f"Columns in ensemble input after dropping nsigmas: {col}")
         targets = split[InputTarget.TARGET]
         add_data = {
             column: input_data.loc[:, [column.name]].values
@@ -242,6 +251,10 @@ class FeatureSetPreparation(GroupedDataPreparation):
             return feature_set
 
         input_data = split[InputTarget.INPUT]
+        if len(input.columns) == N_COLUMNS_NSIGMAS:
+            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+            col = len(input.columns)
+            print(f"Columns in FSE input after dropping nsigmas: {col}")
         targets = split[InputTarget.TARGET]
         add_data = {
             column: input_data.loc[:, [column.name]].values
