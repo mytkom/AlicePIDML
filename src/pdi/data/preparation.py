@@ -85,9 +85,11 @@ class MeanImputation(DataPreparation):
 
     def _do_process_data(self, data):
         self._mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
+        print("Mean processed data")
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
+        print("Preprocess split mean")
         split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(
             self._mean_df)
         return super()._do_preprocess_split(split)
@@ -125,21 +127,22 @@ class RegressionImputation(DataPreparation):
     def _do_process_data(self, data):
         train_input = data[Split.TRAIN][InputTarget.INPUT]
 
-        self.missing_features = train_input.isnull().any()
-        complete = train_input.dropna()
-        self._regression.fit(complete.loc[:, ~self.missing_features &
-                                             (complete.columns != NSIGMA_COLUMNS)],
+        train_input_n = train_input[train_input.columns[~train_input.columns.isin(NSIGMA_COLUMNS)]]
+        self.missing_features = train_input_n.isnull().any()
+        complete = train_input_n.dropna()
+        self._regression.fit(complete.loc[:, ~self.missing_features],
                              complete.loc[:, self.missing_features])
         self.regression_params = {
-            "missing": list(train_input.columns[self.missing_features]),
-            "non_missing": list(train_input.columns[~self.missing_features &
-                                                    (train_input.columns != NSIGMA_COLUMNS)]),
+            "missing": list(train_input_n.columns[self.missing_features]),
+            "non_missing": list(train_input_n.columns[~self.missing_features]),
             "coef": self._regression.coef_.tolist(),
         }
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
         input = split[InputTarget.INPUT]
+        add_dict1 = {column: input.loc[:, [column]].values
+                    for column in NSIGMA_COLUMNS}
         if len(input.columns) == N_COLUMNS_NSIGMAS:
             input.drop(columns=NSIGMA_COLUMNS, inplace=True)
             col = len(input.columns)
@@ -149,15 +152,19 @@ class RegressionImputation(DataPreparation):
         pred = pd.DataFrame(pred,
                             columns=input.columns[self.missing_features],
                             index=input.index)
+        add_dict2 = {column: input.loc[:, [column.name]].values
+                    for column in Additional if column.name not in NSIGMA_COLUMNS}
+        add_dict = {**add_dict1 **add_dict2}
+        print(f"reg add dict\n{add_dict}")
 
         input = input.fillna(pred)
-        return ({
-            InputTarget.INPUT: input.values,
-            InputTarget.TARGET: targets.values
-        }, {
-            column: input.loc[:, [column.name]].values
-            for column in Additional
-        })
+        return (
+            {
+                InputTarget.INPUT: input.values,
+                InputTarget.TARGET: targets.values,
+            },
+            add_dict
+        )
 
     def save_data(self) -> None:
         """save_data overrides base method. Additionally saves the coefficients of the regression model used in imputation. 

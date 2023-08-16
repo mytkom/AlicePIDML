@@ -201,7 +201,6 @@ class DataPreparation:
         }
 
     def _input_target_split(self, data):
-
         def do_split(data):
             targets = data.loc[:, [TARGET_COLUMN]]
             if len(data.columns) == N_COLUMNS_BIG:
@@ -227,20 +226,23 @@ class DataPreparation:
         return processed_data, additional_data
 
     def _do_preprocess_split(self, split):
+        print("Preprocess split base")
         input = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
         add_dict = {column: input.loc[:, [column.name]].values
                     for column in Additional}
+        print(f"add dict in middle:\n{add_dict}")
         if len(input.columns) == N_COLUMNS_NSIGMAS:
             input.drop(columns=NSIGMA_COLUMNS, inplace=True)
             col = len(input.columns)
             print(f"Columns in input after dropping nsigmas: {col}")
+        print(f"add dict\n{add_dict}")
         return (
             {
                 InputTarget.INPUT: input.values,
                 InputTarget.TARGET: targets.values,
             },
-            add_dict,
+            add_dict
         )
 
     def save_data(self) -> None:
