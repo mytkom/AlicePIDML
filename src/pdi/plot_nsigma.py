@@ -21,39 +21,50 @@ NSIGMA_COLUMNS = [
     *["fTPCNSigma" + val for val in PART_DICT.values()],
     *["fTOFNSigma" + val for val in PART_DICT.values()]]
 
+SIGN_CONDS = {
+        "pos": lambda sign: sign == 1,
+        "neu": lambda sign: sign == 0,
+        "neg": lambda sign: sign == -1
+}
+
 CSV_DELIMITER = ","
 
 df = pd.read_csv(INPUT_PATH, sep=CSV_DELIMITER, index_col=0)
 
 for part in PART_DICT:
     for det in ["fTPCNSigma", "fTOFNSigma"]:
-        nsigma = det + PART_DICT[part]
-        df_part = df.loc[df["fPdgCode"] == part]
-        count = df_part[nsigma].size
-        mean_y = round(df_part[nsigma].mean(), 5)
-        std_dev_y = round(df_part[nsigma].std(), 5)
-        mean_x = round(df_part["fPt"].mean(), 5)
-        std_dev_x = round(df_part["fPt"].std(), 5)
+        for sign in SIGN_CONDS:
+            df_part = df.loc[(df["fPdgCode"] == part) & (SIGN_CONDS[sign](df["fSign"]))]
+            nsigma = det + PART_DICT[part]
+            count = df_part[nsigma].size
 
-        fig, ax = plt.subplots()
-        dsartist = dsshow(
-            df_part,
-            ds.Point("fPt", nsigma),
-            ds.count(),
-            norm="log",
-            aspect="auto",
-            ax=ax,
-            )
-        plt.colorbar(dsartist, label="entries")
-        plt.figtext(0.5, 0.75, f"Entries    {count}\nMean x     {mean_x}\nStd Dev x   {std_dev_x}"\
-                    f"Mean y    {mean_y}\nStd Dev y   {std_dev_y}",
-                    bbox={"facecolor":"white", "pad":5})
+            if count < 100:
+                continue
 
-        plt.xlim([0.0, 5.0])
-        plt.ylim([-3.5, 3.5])
-        plt.xlabel("pT")
-        plt.ylabel(nsigma)
-        plt.title(f"{nsigma} vs pT")
+            mean_y = round(df_part[nsigma].mean(), 5)
+            std_dev_y = round(df_part[nsigma].std(), 5)
+            mean_x = round(df_part["fPt"].mean(), 5)
+            std_dev_x = round(df_part["fPt"].std(), 5)
 
-        plt.savefig(f"nsigma_{nsigma}_pt.png", bbox_inches="tight")
-        plt.close()
+            fig, ax = plt.subplots()
+            dsartist = dsshow(
+                df_part,
+                ds.Point("fPt", nsigma),
+                ds.count(),
+                norm="log",
+                aspect="auto",
+                ax=ax,
+                )
+            plt.colorbar(dsartist, label="entries")
+            plt.figtext(0.48, 0.69, f"Entries    {count}\nMean x     {mean_x}\nStd Dev x   {std_dev_x}\n"\
+                        f"Mean y    {mean_y}\nStd Dev y   {std_dev_y}",
+                        bbox={"facecolor":"white", "pad":5})
+
+            plt.xlim([0.0, 5.0])
+            plt.ylim([-3.5, 3.5])
+            plt.xlabel("pT")
+            plt.ylabel(nsigma)
+            plt.title(f"{nsigma} {sign} vs pT")
+
+            plt.savefig(f"nsigma_{nsigma}_{sign}_pt.png", bbox_inches="tight")
+            plt.close()
