@@ -85,11 +85,9 @@ class MeanImputation(DataPreparation):
 
     def _do_process_data(self, data):
         self._mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
-        print("Mean processed data")
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
-        print("Preprocess split mean")
         split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(
             self._mean_df)
         return super()._do_preprocess_split(split)
@@ -141,21 +139,18 @@ class RegressionImputation(DataPreparation):
 
     def _do_preprocess_split(self, split):
         input = split[InputTarget.INPUT]
-        add_dict1 = {column: input.loc[:, [column]].values
-                    for column in NSIGMA_COLUMNS}
+        add_dict1 = {column: input.loc[:, [column.name]].values
+                    for column in Additional if column.name in NSIGMA_COLUMNS}
         if len(input.columns) == N_COLUMNS_NSIGMAS:
             input.drop(columns=NSIGMA_COLUMNS, inplace=True)
-            col = len(input.columns)
-            print(f"Columns in regression input after dropping nsigmas: {col}")
         targets = split[InputTarget.TARGET]
         pred = self._regression.predict(input.loc[:, ~self.missing_features])
         pred = pd.DataFrame(pred,
                             columns=input.columns[self.missing_features],
                             index=input.index)
-        add_dict2 = {column: input.loc[:, [column.name]].values
+        add_dict = {column: input.loc[:, [column.name]].values
                     for column in Additional if column.name not in NSIGMA_COLUMNS}
-        add_dict = {**add_dict1 **add_dict2}
-        print(f"reg add dict\n{add_dict}")
+        add_dict.update(add_dict1)
 
         input = input.fillna(pred)
         return (
@@ -201,15 +196,13 @@ class EnsemblePreparation(GroupedDataPreparation):
 
     def _do_preprocess_split(self, split):
         input_data = split[InputTarget.INPUT]
-        if len(input.columns) == N_COLUMNS_NSIGMAS:
-            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
-            col = len(input.columns)
-            print(f"Columns in ensemble input after dropping nsigmas: {col}")
-        targets = split[InputTarget.TARGET]
         add_data = {
             column: input_data.loc[:, [column.name]].values
             for column in Additional
         }
+        if len(input_data.columns) == N_COLUMNS_NSIGMAS:
+            input_data.drop(columns=NSIGMA_COLUMNS, inplace=True)
+        targets = split[InputTarget.TARGET]
         return (
             {
                 InputTarget.INPUT: input_data.dropna(axis="columns").values,
@@ -258,15 +251,13 @@ class FeatureSetPreparation(GroupedDataPreparation):
             return feature_set
 
         input_data = split[InputTarget.INPUT]
-        if len(input.columns) == N_COLUMNS_NSIGMAS:
-            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
-            col = len(input.columns)
-            print(f"Columns in FSE input after dropping nsigmas: {col}")
-        targets = split[InputTarget.TARGET]
         add_data = {
             column: input_data.loc[:, [column.name]].values
             for column in Additional
         }
+        if len(input_data.columns) == N_COLUMNS_NSIGMAS:
+            input_data.drop(columns=NSIGMA_COLUMNS, inplace=True)
+        targets = split[InputTarget.TARGET]
         return ({
             InputTarget.INPUT: make_feature_set(input_data),
             InputTarget.TARGET: targets.values

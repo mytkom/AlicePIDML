@@ -50,10 +50,10 @@ def get_nsigma_predictions_data(
         nsigmas = abs(data_dict[nsigma_tpc_col])
         nsigmas = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
                           pow(data_dict[nsigma_tof_col], 2)) \
-                  .where(data_dict["fPt"] > 0.5 and
-                         data_dict[nsigma_tpc_col] != -999 and
-                         data_dict[nsigma_tof_col] != -999, nsigmas)
-        nsigmas[data_dict[nsigma_tpc_col] == -999] = np.nan
+                  .where(data_dict["fPt"] > 0.5, nsigmas) #and
+                         #data_dict[nsigma_tpc_col] != -999 and
+                         #data_dict[nsigma_tof_col] != -999, nsigmas)
+        #nsigmas[data_dict[nsigma_tpc_col] == -999] = np.nan
 
         predictions.extend(nsigmas.cpu().detach().numpy())
         targets.extend(target.numpy())
