@@ -24,7 +24,8 @@ NSIGMA_COLUMNS = [
 SIGN_CONDS = {
         "pos": lambda sign: sign == 1,
         "neu": lambda sign: sign == 0,
-        "neg": lambda sign: sign == -1
+        "neg": lambda sign: sign == -1,
+        "all": lambda sign: True
 }
 
 CSV_DELIMITER = ","
