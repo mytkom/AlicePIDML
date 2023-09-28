@@ -188,6 +188,19 @@ class EnsemblePreparation(GroupedDataPreparation):
         drop_columns = DROP_COLUMNS_BIG if len(data.columns) == N_COLUMNS_BIG else DROP_COLUMNS_SMALL
         groups = missing.groupby(list(missing.columns.drop(drop_columns)),
                                  dropna=False).groups
+        print("Groups")
+        print(groups)
+
+        for key, val in groups.items():
+            print(f"group key: {key} len: {len(key)} val: {val}")
+            pow_two = 2**np.arange(len(key))
+            neg_key = ~np.array(key)
+            key_prod = pow_two * neg_key
+            key_sum = np.sum(key_prod)
+            group_id = GroupID(key_sum)
+            print(f"2**key: {pow_two}\nneg_key: {neg_key}\n" \
+                  f"key_prod: {key_prod}\nkey_sum: {key_sum}\n" \
+                  f"final group ID: {group_id}")
         return {
             GroupID(np.sum(2**np.arange(len(key)) * ~np.array(key))):
             data.loc[val]

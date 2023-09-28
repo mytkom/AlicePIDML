@@ -83,6 +83,9 @@ class NeuralNetEnsemble(nn.Module):
         })
 
     def forward(self, x: Tensor, group: Tensor):
+        group_np = group[0].numpy()[0]
+        group_str = str(group_np)
+        print(f"Forward with group {group_np} str: {group_str}")
         if not torch.all(group == group[0]):
             raise Exception(
                 "Not all tensors in batch belong to the same group.")
