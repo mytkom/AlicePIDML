@@ -101,13 +101,12 @@ def get_predictions_data_and_loss(
             #prediction
             input_data = input_data.to(device)
             group_id = data_dict.get(GROUP_ID_KEY)
-            print(f"Group id key: {GROUP_ID_KEY} group id: {group_id}")
             if group_id is None:
                 out = model(input_data)
             else:
-                print(f"Getting model with group id {group_id}")
+                #print(f"Getting model with group id {group_id[0].numpy()[0]:b}")
                 out = model(input_data, group_id)
-                print(f"Got model with group id {group_id}")
+                #print(f"Got model with group id {group_id[0].numpy()[0]:b}")
             #loss
             if loss_fun and target_code:
                 binary_target = (target == target_code).type(

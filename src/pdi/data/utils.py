@@ -25,7 +25,7 @@ from pdi.data.constants import (COLUMNS_TO_SCALE, CSV_DELIMITER, DROP_COLUMNS_SM
                                 DROP_COLUMNS_BIG, N_COLUMNS_BIG, N_COLUMNS_SMALL,
                                 N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS, GROUP_ID_KEY, INPUT_PATH,
                                 MISSING_VALUES, PROCESSED_DIR, SEED, TARGET_COLUMN,
-                                TEST_SIZE, TRAIN_SIZE)
+                                TEST_SIZE, TRAIN_SIZE, DROP_COLUMNS)
 from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
 from sklearn.model_selection import train_test_split
 from torch import Tensor
@@ -203,6 +203,7 @@ class DataPreparation:
     def _input_target_split(self, data):
         def do_split(data):
             targets = data.loc[:, [TARGET_COLUMN]]
+            #input_data = data.drop(columns=DROP_COLUMNS)
             if len(data.columns) == N_COLUMNS_BIG:
                 input_data = data.drop(columns=DROP_COLUMNS_BIG)
             elif len(data.columns) == N_COLUMNS_SMALL:

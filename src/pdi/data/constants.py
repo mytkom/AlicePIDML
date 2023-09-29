@@ -28,6 +28,7 @@ NSIGMA_COLUMNS = [
      *["fTOFNSigma" + val for val in PART_DICT.values()]]
 
 CSV_DELIMITER = ","
+DROP_COLUMNS = ["fPdgCode", "fIsPhysicalPrimary"]
 DROP_COLUMNS_BIG = ["fPdgCode", "fIsPhysicalPrimary",
      *["fTPCExpSigma" + val for val in PART_DICT.values()],
      *["fTOFExpSigma" + val for val in PART_DICT.values()],

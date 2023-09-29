@@ -21,7 +21,7 @@ import pandas as pd
 from pdi.data.constants import (DROP_COLUMNS_SMALL, DROP_COLUMNS_BIG,
                                 N_COLUMNS_BIG, N_COLUMNS_SMALL,
                                 N_COLUMNS, N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS,
-                                PROCESSED_DIR)
+                                PROCESSED_DIR, DROP_COLUMNS)
 from pdi.data.types import Additional, GroupID, InputTarget, Split
 from pdi.data.utils import DataPreparation, GroupedDataPreparation
 from sklearn.linear_model import LinearRegression
@@ -181,13 +181,23 @@ class EnsemblePreparation(GroupedDataPreparation):
         Args:
             complete_only (bool, optional): Whether to return only the group with complete examples. Defaults to False.
         """
+        print(f"COMPLETE_GROUP_ID: {self.COMPLETE_GROUP_ID} n_columns: {N_COLUMNS}")
         super().__init__(complete_only)
 
     def _group_data(self, data):
         missing = data.isnull()
+
+        #groups = missing.groupby(list(missing.columns.drop(DROP_COLUMNS)),
+        #                         dropna=False).groups
+
+        print(f"Start of grouping, {len(data.columns)} columns in data")
         drop_columns = DROP_COLUMNS_BIG if len(data.columns) == N_COLUMNS_BIG else DROP_COLUMNS_SMALL
-        groups = missing.groupby(list(missing.columns.drop(drop_columns)),
-                                 dropna=False).groups
+        missing.drop(columns=drop_columns, inplace=True)
+        if len(missing.columns) == N_COLUMNS_NSIGMAS:
+            print(f"{len(missing.columns)} columns, dropping nsigmas before grouping")
+            missing.drop(columns=NSIGMA_COLUMNS, inplace=True)
+        print(f"Columns in initial data after dropping in missing: {len(data.columns)} columns in missing: {len(missing.columns)}")
+        groups = missing.groupby(list(missing.columns), dropna=False).groups
         print("Groups")
         print(groups)
 
@@ -200,7 +210,7 @@ class EnsemblePreparation(GroupedDataPreparation):
             group_id = GroupID(key_sum)
             print(f"2**key: {pow_two}\nneg_key: {neg_key}\n" \
                   f"key_prod: {key_prod}\nkey_sum: {key_sum}\n" \
-                  f"final group ID: {group_id}")
+                  f"final group ID: {group_id} binary: {group_id:b}")
         return {
             GroupID(np.sum(2**np.arange(len(key)) * ~np.array(key))):
             data.loc[val]
@@ -213,7 +223,9 @@ class EnsemblePreparation(GroupedDataPreparation):
             column: input_data.loc[:, [column.name]].values
             for column in Additional
         }
+        print(f"Ensemble do preprocess split columns: {len(input_data.columns)}")
         if len(input_data.columns) == N_COLUMNS_NSIGMAS:
+            print(f"{len(input_data.columns)} columns, dropping nsigmas")
             input_data.drop(columns=NSIGMA_COLUMNS, inplace=True)
         targets = split[InputTarget.TARGET]
         return (
