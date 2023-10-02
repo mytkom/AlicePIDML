@@ -10,6 +10,8 @@ plot_efficiency_comparison
     Plots efficiency (recall) graph depending on the momentum of the particles.
 """
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from sklearn.metrics import precision_recall_curve
 
 from pdi.evaluate import get_interval_purity_efficiency
@@ -20,9 +22,10 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
     for method_name, results in data_dict.items():
         targets = results["targets"]
         preds = results["predictions"]
-
         precision, recall, _ = precision_recall_curve(targets, preds)
-        plt.plot(recall, precision, label=method_name)
+        plt.plot(recall, precision, "o", label=method_name)
+        df = pd.DataFrame(columns=["recall", "precision"], data=np.transpose(np.vstack((recall, precision))))
+        df.to_csv(f"{save_dir}/precision_recall.csv", sep=",", float_format="%.5f")
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
@@ -37,6 +40,7 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
 
 def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
     plt.figure()
+    df = pd.DataFrame()
     for method_name, results in data_dict.items():
         targets = results["targets"]
         preds = results["predictions"]
@@ -48,7 +52,7 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
         purities_p_plot, _, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
             targets, selected, fP, intervals)
 
-        p = plt.plot(momenta_avg, purities_p_plot, label=method_name)
+        p = plt.plot(momenta_avg, purities_p_plot, "o", label=method_name)
         plt.fill_between(
             momenta_avg,
             confidence_intervals["purity_lower"],
@@ -56,6 +60,11 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
             color=p[0].get_color(),
             alpha=0.2,
         )
+
+        df[f"Purity {method_name}"] = pd.Series(purities_p_plot)
+        df[f"P {method_name}"] = pd.Series(momenta_avg)
+
+    df.to_csv(f"{save_dir}/p_purity_optimized_threshold.csv", sep=",", float_format="%.5f")
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Purity")
@@ -74,6 +83,7 @@ def plot_efficiency_comparison(target_name,
                                intervals,
                                save_dir=None):
     plt.figure()
+    df = pd.DataFrame()
     for method_name, results in data_dict.items():
         targets = results["targets"]
         preds = results["predictions"]
@@ -85,7 +95,7 @@ def plot_efficiency_comparison(target_name,
         _, efficiencies_p_plot, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
             targets, selected, fP, intervals)
 
-        p = plt.plot(momenta_avg, efficiencies_p_plot, label=method_name)
+        p = plt.plot(momenta_avg, efficiencies_p_plot, "o", label=method_name)
         plt.fill_between(
             momenta_avg,
             confidence_intervals["efficiency_lower"],
@@ -93,6 +103,11 @@ def plot_efficiency_comparison(target_name,
             color=p[0].get_color(),
             alpha=0.2,
         )
+
+        df[f"Efficiency {method_name}"] = pd.Series(efficiencies_p_plot)
+        df[f"P {method_name}"] = pd.Series(momenta_avg)
+
+    df.to_csv(f"{save_dir}/p_efficiency_optimized_threshold.csv", sep=",", float_format="%.5f")
 
     plt.xlabel("p (GeV/c)")
     plt.ylabel("Efficiency")
