@@ -31,6 +31,7 @@ def get_nsigma_predictions_data(
     target_code: int,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32], float]:
     """get_nsigma_predictions_data returns all information in a dataloader in combined numpy arrays.
+    The nsigma method as presented here is used always on a dataset including incomplete examples.
 
     Args:
         dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]])
@@ -50,10 +51,9 @@ def get_nsigma_predictions_data(
         nsigmas = abs(data_dict[nsigma_tpc_col])
         nsigmas = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
                           pow(data_dict[nsigma_tof_col], 2)) \
-                  .where(data_dict["fPt"] > 0.5, nsigmas) #and
-                         #data_dict[nsigma_tpc_col] != -999 and
-                         #data_dict[nsigma_tof_col] != -999, nsigmas)
-        #nsigmas[data_dict[nsigma_tpc_col] == -999] = np.nan
+                  .where(data_dict["fPt"] > 0.5f, nsigmas)
+        nsigmas[data_dict[nsigma_tpc_col] == -999] = np.nan
+        nsigmas[data_dict[nsigma_tof_col] == -999 and data_dict["fPt"] > 0.5f] = np.nan
 
         predictions.extend(nsigmas.cpu().detach().numpy())
         targets.extend(target.numpy())
