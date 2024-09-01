@@ -11,32 +11,50 @@ DataPreparation
 GroupedDataPreparation
     Base class for preparation techniques with grouping.
 """
+
 import gzip
+import json
 import os
 import pickle
 from itertools import chain
 from random import Random
-from typing import Generic, Iterable, Iterator, TypeVar
+import typing
+from typing import Generic, Iterable, Iterator, TypeVar, Optional
 
 import numpy as np
 import pandas as pd
 import torch
-from pdi.data.constants import (COLUMNS_TO_SCALE, CSV_DELIMITER, DROP_COLUMNS_SMALL,
-                                DROP_COLUMNS_BIG, N_COLUMNS_BIG, N_COLUMNS_SMALL,
-                                N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS, GROUP_ID_KEY, INPUT_PATH,
-                                MISSING_VALUES, PROCESSED_DIR, SEED, TARGET_COLUMN,
-                                TEST_SIZE, TRAIN_SIZE, DROP_COLUMNS)
-from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
 from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+
+from pdi.data.constants import (
+    CSV_DELIMITER,
+    DROP_COLUMNS_SMALL,
+    DROP_COLUMNS_BIG,
+    N_COLUMNS_BIG,
+    N_COLUMNS_SMALL,
+    N_COLUMNS_NSIGMAS,
+    NSIGMA_COLUMNS,
+    GROUP_ID_KEY,
+    MISSING_VALUES,
+    PROCESSED_DIR,
+    SEED,
+    TARGET_COLUMN,
+    TEST_SIZE,
+    TRAIN_SIZE,
+    DO_NOT_SCALE,
+    COLUMNS_DROPPED_FOR_TESTS,
+    TPC_CUT,
+)
+from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
+from pdi.data.config import INPUT_PATH, RUN
 
 T = TypeVar("T")
 
 
 class CombinedDataLoader(Generic[T]):
-    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches.
-    """
+    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches."""
 
     def __init__(self, shuffle: bool, *dataloaders: DataLoader[T]):
         """__init__
@@ -66,7 +84,7 @@ class CombinedDataLoader(Generic[T]):
                 iters.remove(it)
 
     def __len__(self) -> int:
-        return sum([len(d) for d in self.dataloaders])
+        return sum(len(d) for d in self.dataloaders)
 
 
 class DictDataset(Dataset[DatasetItem]):
@@ -76,14 +94,18 @@ class DictDataset(Dataset[DatasetItem]):
         Dataset
     """
 
-    def __init__(self, input_tensors: Tensor, target_tensors: Tensor,
-                 **additional_tensors: Tensor):
+    def __init__(
+        self,
+        input_tensors: Tensor,
+        target_tensors: Tensor,
+        **additional_tensors: Tensor,
+    ):
         """__init__
 
         Args:
             input_tensors (Tensor): tensor containing all inputtensors
             target_tensors (Tensor): tensor containing all target tensors
-            **additional_tensors (Tensor): dict of tensors containing additional information 
+            **additional_tensors (Tensor): dict of tensors containing additional information
         """
         self.input_tensors = input_tensors
         self.target_tensors = target_tensors
@@ -96,13 +118,12 @@ class DictDataset(Dataset[DatasetItem]):
         return (
             self.input_tensors[index],
             self.target_tensors[index],
-            {key: val[index]
-             for key, val in self.dict_tensors.items()},
+            {key: val[index] for key, val in self.dict_tensors.items()},
         )
 
 
 class DataPreparation:
-    """ Base class for preparation techniques without grouping.
+    """Base class for preparation techniques without grouping.
 
     Methods:
         pos_weight: return the ratio between the negative and positive samples in the train split.
@@ -110,10 +131,12 @@ class DataPreparation:
         save_data: save preprocessed data.
         prepare_dataloaders: create dataloaders from preprocessed data.
     """
+
     save_dir = f"{PROCESSED_DIR}/basic"
 
     def __init__(self) -> None:
         self._scaling_params = pd.DataFrame(columns=["column", "mean", "std"])
+        self._columns_for_training = None
         self._input_target = {}
         self._additional = {}
 
@@ -130,28 +153,29 @@ class DataPreparation:
 
         train_targets = self._input_target[Split.TRAIN][InputTarget.TARGET]
         binary_targets = train_targets == target
-        pos_weight: float = (np.size(binary_targets) - np.sum(binary_targets)
-                             ) / (np.sum(binary_targets) + np.finfo(float).eps)
+        pos_weight: float = (np.size(binary_targets) - np.sum(binary_targets)) / (
+            np.sum(binary_targets) + np.finfo(float).eps
+        )
         return pos_weight
 
-    def prepare_data(self) -> None:
+    def prepare_data(self, input_path: str = INPUT_PATH) -> None:
         """prepare_data loads and preprocesses data.
         Data is loaded from the path provided in `pdi.data.constants`
         """
-        data = self._load_input_data()
+        data = self._load_input_data(input_path)
+        data = data.loc[data["fTPCSignal"] < TPC_CUT, :]
         data = self._delete_unique_targets(data)
         data = self._make_missing_null(data)
         data = self._normalize_data(data)
         split_data = self._test_train_split(data)
         split_data_2 = self._input_target_split(split_data)
-        self._input_target, self._additional = self._do_process_data(
-            split_data_2)
+        self._input_target, self._additional = self._do_process_data(split_data_2)
 
-    def _load_input_data(self):
-        return pd.read_csv(INPUT_PATH, sep=CSV_DELIMITER, index_col=0)
+    def _load_input_data(self, input_path: str = INPUT_PATH):
+        return pd.read_csv(input_path, sep=CSV_DELIMITER, index_col=0)
 
     def _delete_unique_targets(self, data):
-        THRESHOLD = 100
+        THRESHOLD = 200
         target_counts = data[TARGET_COLUMN].value_counts()
         for target, count in target_counts.items():
             if count < THRESHOLD:
@@ -161,55 +185,71 @@ class DataPreparation:
     def _make_missing_null(self, data):
         for column, val in MISSING_VALUES.items():
             data.loc[data[column] == val, column] = np.NaN
+
+        if RUN == 2:
+            print("Run 2 format")
+
+        if RUN == 3:
+            data.loc[data["fTRDPattern"].isnull(), ["fTRDSignal", "fTRDPattern"]] = np.NaN
+            data.loc[data["fBeta"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
+            print("Run 3 format")
         return data
 
     def _normalize_data(self, data):
-        for column in COLUMNS_TO_SCALE:
+        for column in data.columns:
+            if column in DO_NOT_SCALE or NSIGMA_COLUMNS:
+                continue
+            mean = np.mean(data[column])
+            std = np.std(data[column])
+            if std == 0:
+                mean = 0
+                std = 1
             self._scaling_params = pd.concat(
                 [
                     self._scaling_params,
                     pd.DataFrame(
                         {
                             "column": column,
-                            "mean": np.mean(data[column]),
-                            "std": np.std(data[column]),
+                            "mean": mean,
+                            "std": std,
                         },
-                        index=[0])
+                        index=[0],
+                    ),
                 ],
                 ignore_index=True,
             )
-            data[column] = (data[column] - np.mean(data[column])) / np.std(
-                data[column])
+            data[column] = (data[column] - mean) / std
         return data
 
     def _test_train_split(self, data):
         train_to_val_ratio = TRAIN_SIZE / (1 - TEST_SIZE)
-        (data_not_test,
-         test_data) = train_test_split(data,
-                                       test_size=TEST_SIZE,
-                                       random_state=SEED,
-                                       stratify=data.loc[:, [TARGET_COLUMN]])
+        (data_not_test, test_data) = train_test_split(
+            data,
+            test_size=TEST_SIZE,
+            random_state=SEED,
+            stratify=data.loc[:, [TARGET_COLUMN]],
+        )
         (train_data, val_data) = train_test_split(
             data_not_test,
             train_size=train_to_val_ratio,
             random_state=SEED,
-            stratify=data_not_test.loc[:, [TARGET_COLUMN]])
-        return {
-            Split.TRAIN: train_data,
-            Split.VAL: val_data,
-            Split.TEST: test_data
-        }
+            stratify=data_not_test.loc[:, [TARGET_COLUMN]],
+        )
+        return {Split.TRAIN: train_data, Split.VAL: val_data, Split.TEST: test_data}
 
     def _input_target_split(self, data):
         def do_split(data):
             targets = data.loc[:, [TARGET_COLUMN]]
-            #input_data = data.drop(columns=DROP_COLUMNS)
+            # input_data = data.drop(columns=DROP_COLUMNS)
             if len(data.columns) == N_COLUMNS_BIG:
                 input_data = data.drop(columns=DROP_COLUMNS_BIG)
             elif len(data.columns) == N_COLUMNS_SMALL:
                 input_data = data.drop(columns=DROP_COLUMNS_SMALL)
             else:
-                raise ValueError("The input table has invalid number of columns. Was the PID ML producer updated?")
+                raise ValueError(
+                    "The input table has invalid number of columns. Was the PID ML producer updated?"
+                )
+
             return {InputTarget.INPUT: input_data, InputTarget.TARGET: targets}
 
         split_data = {}
@@ -222,38 +262,54 @@ class DataPreparation:
         processed_data = {}
         additional_data = {}
         for key, val in data.items():
-            processed_data[key], additional_data[
-                key] = self._do_preprocess_split(val)
+            processed_data[key], additional_data[key] = self._do_preprocess_split(val)
         return processed_data, additional_data
 
     def _do_preprocess_split(self, split):
-        input = split[InputTarget.INPUT]
+        input_split = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
-        add_dict = {column: input.loc[:, [column.name]].values
+        add_dict = {column: input_split.loc[:, [column.name]].values
                     for column in Additional}
-        if len(input.columns) == N_COLUMNS_NSIGMAS:
-            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+        if len(input_split.columns) == N_COLUMNS_NSIGMAS:
+            input_split.drop(columns=NSIGMA_COLUMNS, inplace=True)
+
+        input_split.drop(columns=COLUMNS_DROPPED_FOR_TESTS, inplace=True)
+
+        columns_for_training = pd.Series(input_split.columns.tolist())
+        columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
+        self._columns_for_training = columns_for_training
+
+        with open(f"{self.save_dir}/columns_for_training.json", "w") as f:
+            f.write(json.dumps(
+                {
+                    "columns_for_training": self._columns_for_training.tolist()
+                }
+            ))
         return (
             {
-                InputTarget.INPUT: input.values,
+                InputTarget.INPUT: input_split.values,
                 InputTarget.TARGET: targets.values,
             },
-            add_dict
+            add_dict,
         )
 
-    def save_data(self) -> None:
+    def save_data(self, save_dir: str = None) -> None:
         """save_data saves preprocessed data, as well as scaling parameters, to disk.
         Save location is given in the class variable `save_dir`
         """
+        if save_dir is not None:
+            self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
         for split, it_data in self._input_target.items():
-            with gzip.open(f"{self.save_dir}/input_target_{split.name}.pkl",
-                           "wb") as file:
+            with gzip.open(
+                f"{self.save_dir}/input_target_{split.name}.pkl", "wb"
+            ) as file:
                 pickle.dump(it_data, file)
 
         for split, add_data in self._additional.items():
-            with gzip.open(f"{self.save_dir}/additional_{split.name}.pkl",
-                           "wb") as file:
+            with gzip.open(
+                f"{self.save_dir}/additional_{split.name}.pkl", "wb"
+            ) as file:
                 pickle.dump(add_data, file)
 
         self._scaling_params.to_json(
@@ -262,31 +318,39 @@ class DataPreparation:
             orient="split",
         )
 
+        with open(f"{self.save_dir}/columns_for_training.json", "w", encoding="UTF-8") as f:
+            f.write(
+                json.dumps(
+                    {"columns_for_training": self._columns_for_training.tolist()}
+                )
+            )
+
     def _load_preprocessed_data(self, splits):
         for split in splits:
-            with gzip.open(f"{self.save_dir}/input_target_{split.name}.pkl",
-                           "rb") as file:
+            with gzip.open(
+                f"{self.save_dir}/input_target_{split.name}.pkl", "rb"
+            ) as file:
                 self._input_target[split] = pickle.load(file)
-            with gzip.open(f"{self.save_dir}/additional_{split.name}.pkl",
-                           "rb") as file:
+            with gzip.open(
+                f"{self.save_dir}/additional_{split.name}.pkl", "rb"
+            ) as file:
                 self._additional[split] = pickle.load(file)
 
     def _try_load_preprocessed_data(self, splits):
-        if any(key not in self._input_target or key not in self._additional
-               for key in splits):
+        if any(
+            key not in self._input_target or key not in self._additional
+            for key in splits
+        ):
             self._load_preprocessed_data(splits)
 
     def prepare_dataloaders(
-        self,
-        batch_size: int,
-        num_workers: int,
-        splits: list[Split] = list(Split)
+        self, batch_size: int, num_workers: int, splits: Optional[list[Split]] = None
     ) -> tuple[Iterable[DatasetItem], ...]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
-        
+
         Args:
             batch_size (int): batch size
-            num_workers (int): number of worker processed used in loading data. 
+            num_workers (int): number of worker processed used in loading data.
                 See `torch.utils.data.DataLoader` for more info.
             splits (list[Split], optional): list of splits to create dataloaders for.
                 Defaults to [Split.TRAIN, Split.VAL, Split.TEST].
@@ -294,14 +358,15 @@ class DataPreparation:
         Returns:
             tuple[Iterable[DatasetItem], ...]: tuple of dataloaders, one for each split.
         """
+        if splits is None:
+            splits = list(Split)
+
         self._try_load_preprocessed_data(splits)
 
         def create_dataset(input_target, additional):
             return DictDataset(
-                torch.tensor(input_target[InputTarget.INPUT],
-                             dtype=torch.float32),
-                torch.tensor(input_target[InputTarget.TARGET],
-                             dtype=torch.float32),
+                torch.tensor(input_target[InputTarget.INPUT], dtype=torch.float32),
+                torch.tensor(input_target[InputTarget.TARGET], dtype=torch.float32),
                 **{
                     column.name: torch.tensor(val, dtype=torch.float32)
                     for column, val in additional.items()
@@ -309,8 +374,7 @@ class DataPreparation:
             )
 
         datasets = {
-            split: create_dataset(self._input_target[split],
-                                  self._additional[split])
+            split: create_dataset(self._input_target[split], self._additional[split])
             for split in splits
         }
 
@@ -324,11 +388,20 @@ class DataPreparation:
             for key, dataset in datasets.items()
         }
 
-        return (*dataloaders.values(), )
+        return (*dataloaders.values(),)
+
+    def load_columns(self) -> list[str]:
+        cols_for_training_path = self.save_dir
+
+        with open(os.path.join(cols_for_training_path, "columns_for_training.json"), encoding="UTF-8") as f:
+            data = json.load(f)
+
+        cols = data["columns_for_training"]
+        return cols
 
 
 class GroupedDataPreparation(DataPreparation):
-    """ Base class for preparation techniques with grouping.
+    """Base class for preparation techniques with grouping.
 
     Methods:
         pos_weight: return the ratio between the negative and positive samples in the train split, in all groups.
@@ -337,6 +410,7 @@ class GroupedDataPreparation(DataPreparation):
         prepare_dataloaders: create dataloaders from preprocessed data.
 
     """
+
     COMPLETE_GROUP_ID: GroupID
 
     def __init__(self, complete_only: bool):
@@ -348,13 +422,12 @@ class GroupedDataPreparation(DataPreparation):
     def pos_weight(self, target: int) -> float:
         self._try_load_preprocessed_data([Split.TRAIN])
         target_list = [
-            group[Split.TRAIN][InputTarget.TARGET]
-            for group in self.grouped_it.values()
+            group[Split.TRAIN][InputTarget.TARGET] for group in self.grouped_it.values()
         ]
-        binary_targets = np.concatenate(
-            [targets == target for targets in target_list])
-        pos_weight: float = (np.size(binary_targets) -
-                             np.sum(binary_targets)) / np.sum(binary_targets)
+        binary_targets = np.concatenate([targets == target for targets in target_list])
+        pos_weight: float = (np.size(binary_targets) - np.sum(binary_targets)) / np.sum(
+            binary_targets
+        )
         return pos_weight
 
     def get_group_ids(self) -> list[GroupID]:
@@ -366,8 +439,9 @@ class GroupedDataPreparation(DataPreparation):
         self._try_load_preprocessed_data([Split.TRAIN])
         return list(self.grouped_it.keys())
 
-    def prepare_data(self) -> None:
-        data = self._load_input_data()
+    def prepare_data(self, input_path: str = INPUT_PATH) -> None:
+        data = self._load_input_data(input_path)
+        data = data.loc[data["fTPCSignal"] < TPC_CUT, :]
         data = self._delete_unique_targets(data)
         data = self._make_missing_null(data)
         data = self._normalize_data(data)
@@ -375,24 +449,28 @@ class GroupedDataPreparation(DataPreparation):
         for gid, group_data in group_dict.items():
             split_data = self._test_train_split(group_data)
             split_data_2 = self._input_target_split(split_data)
-            self.grouped_it[gid], self.grouped_add[
-                gid] = self._do_process_data(split_data_2)
+            self.grouped_it[gid], self.grouped_add[gid] = self._do_process_data(
+                split_data_2
+            )
 
-    def _group_data(self, data):
+    def _group_data(self, _):
         return {}
 
-    def save_data(self) -> None:
+    def save_data(self, save_dir: str = None) -> None:
+        if save_dir is not None:
+            self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
-        def save_dict(name, dict):
+        def save_dict(name, dictionary):
             transposed_dict = {split: {} for split in list(Split)}
-            for gid, group_data in dict.items():
+            for gid, group_data in dictionary.items():
                 for split, sd in group_data.items():
                     transposed_dict[split][gid] = sd
 
             for split, split_data in transposed_dict.items():
-                with gzip.open(f"{self.save_dir}/{name}_{split.name}.pkl",
-                               "wb") as file:
+                with gzip.open(
+                    f"{self.save_dir}/{name}_{split.name}.pkl", "wb"
+                ) as file:
                     pickle.dump(split_data, file)
 
         save_dict("input_target", self.grouped_it)
@@ -406,15 +484,17 @@ class GroupedDataPreparation(DataPreparation):
 
     def _load_preprocessed_data(self, splits):
         for split in splits:
-            with gzip.open(f"{self.save_dir}/input_target_{split.name}.pkl",
-                           "rb") as file:
+            with gzip.open(
+                f"{self.save_dir}/input_target_{split.name}.pkl", "rb"
+            ) as file:
                 data = pickle.load(file)
                 for gid, group_data in data.items():
                     self.grouped_it.setdefault(gid, {})
                     self.grouped_it[gid][split] = group_data
 
-            with gzip.open(f"{self.save_dir}/additional_{split.name}.pkl",
-                           "rb") as file:
+            with gzip.open(
+                f"{self.save_dir}/additional_{split.name}.pkl", "rb"
+            ) as file:
                 data = pickle.load(file)
                 for gid, group_data in data.items():
                     self.grouped_add.setdefault(gid, {})
@@ -422,8 +502,8 @@ class GroupedDataPreparation(DataPreparation):
 
     def _try_load_preprocessed_data(self, splits):
         are_splits_loaded = [
-            split in group_dict for group_dict in chain(
-                self.grouped_it.values(), self.grouped_add.values())
+            split in group_dict
+            for group_dict in chain(self.grouped_it.values(), self.grouped_add.values())
             for split in splits
         ]
 
@@ -434,52 +514,79 @@ class GroupedDataPreparation(DataPreparation):
         self,
         batch_size: int,
         num_workers: int,
-        splits: list[Split] = list(Split)
+        splits: list[Split] = list(Split),
+        groupId: GroupID = None
     ) -> tuple[Iterable[DatasetItem], ...]:
+        if splits is None:
+            splits = list(Split)
+
         self._try_load_preprocessed_data(splits)
 
         def create_datasets(input_target, additional, gid, splits):
             return {
                 split: DictDataset(
-                    torch.tensor(input_target[split][InputTarget.INPUT],
-                                 dtype=torch.float32),
-                    torch.tensor(input_target[split][InputTarget.TARGET],
-                                 dtype=torch.float32),
+                    torch.tensor(
+                        input_target[split][InputTarget.INPUT], dtype=torch.float32
+                    ),
+                    torch.tensor(
+                        input_target[split][InputTarget.TARGET], dtype=torch.float32
+                    ),
                     **{
-                        GROUP_ID_KEY:
-                        torch.full(
-                            input_target[split][InputTarget.TARGET].shape,
-                            gid),
+                        GROUP_ID_KEY: torch.full(
+                            input_target[split][InputTarget.TARGET].shape, gid
+                        ),
                         **{
                             column.name: torch.tensor(val, dtype=torch.float32)
                             for column, val in additional[split].items()
-                        }
+                        },
                     },
                 )
                 for split in splits
             }
 
         datasets = {
-            gid: create_datasets(self.grouped_it[gid], self.grouped_add[gid],
-                                 gid, splits)
-            for gid in self.grouped_it.keys()
+            gid: create_datasets(
+                data, self.grouped_add[gid], gid, splits
+            )
+            for gid, data in self.grouped_it.items()
         }
 
         if self.complete_only:
             dataloaders = {
-                split: DataLoader(datasets[self.COMPLETE_GROUP_ID][split],
-                                  batch_size,
-                                  shuffle=(split == Split.TRAIN),
-                                  num_workers=num_workers)
+                split: DataLoader(
+                    datasets[self.COMPLETE_GROUP_ID][split],
+                    batch_size,
+                    shuffle=(split == Split.TRAIN),
+                    num_workers=num_workers,
+                )
+                for split in splits
+            }
+        elif groupId:
+            separate_dataloaders = {
+                groupId: {
+                    split: DataLoader(dataset,
+                                      batch_size,
+                                      shuffle=(split == Split.TRAIN),
+                                      num_workers=num_workers)
+                    for split, dataset in datasets[groupId].items()
+                }
+            }
+            dataloaders = {
+                split: CombinedDataLoader(
+                    (split == Split.TRAIN),
+                    *[d[split] for d in separate_dataloaders.values()],
+                )
                 for split in splits
             }
         else:
             separate_dataloaders = {
                 gid: {
-                    split: DataLoader(dataset,
-                                      batch_size,
-                                      shuffle=(split == Split.TRAIN),
-                                      num_workers=num_workers)
+                    split: DataLoader(
+                        dataset,
+                        batch_size,
+                        shuffle=(split == Split.TRAIN),
+                        num_workers=num_workers,
+                    )
                     for split, dataset in dataset_splits.items()
                 }
                 for gid, dataset_splits in datasets.items()
@@ -493,4 +600,33 @@ class GroupedDataPreparation(DataPreparation):
                 for split in splits
             }
 
-        return (*dataloaders.values(), )
+        return (*dataloaders.values(),)
+
+    def data_to_ungrouped_df(self, splits: list[Split]) -> pd.DataFrame:
+        cols = self.load_columns()
+        cols.append(TARGET_COLUMN)
+        inputs = []
+        targets = []
+
+        for _, group in self.grouped_it.items():
+            for split in splits:
+                inputs.append(group[split][InputTarget.INPUT])
+                targets.append(group[split][InputTarget.TARGET])
+
+        inputs = np.concatenate(inputs)
+        targets = np.concatenate(targets)
+
+        inputs_targets = np.concatenate((inputs, targets), axis=1)
+        data = pd.DataFrame(data=inputs_targets, columns=cols)
+
+        return data
+
+    def data_to_df_dict(self, split: Split) -> dict[typing.Any, pd.DataFrame]:
+        cols = self.load_columns()
+        groups = {}
+        for gid, group in self.grouped_it.items():
+            data = group[split][InputTarget.INPUT]
+            data = pd.DataFrame(data=data, columns=cols)
+            groups[gid] = data
+
+        return groups

@@ -14,22 +14,30 @@ EnsemblePreparation
 FeatureSetPreparation
     Converts incomplete vectors into sets of feature-value pairs, and groups these sets based on the number of pairs.
 """
+
 import json
+from itertools import combinations
+import sys
 
 import numpy as np
 import pandas as pd
-from pdi.data.constants import (DROP_COLUMNS_SMALL, DROP_COLUMNS_BIG,
-                                N_COLUMNS_BIG, N_COLUMNS_SMALL,
-                                N_COLUMNS, N_COLUMNS_NSIGMAS, NSIGMA_COLUMNS,
-                                PROCESSED_DIR, DROP_COLUMNS)
-from pdi.data.types import Additional, GroupID, InputTarget, Split
-from pdi.data.utils import DataPreparation, GroupedDataPreparation
 from sklearn.linear_model import LinearRegression
-
+from pdi.data.constants import (
+    DROP_COLUMNS_SMALL,
+    DROP_COLUMNS_BIG,
+    N_COLUMNS_BIG,
+    N_COLUMNS_NSIGMAS,
+    NSIGMA_COLUMNS,
+    PROCESSED_DIR,
+    COLUMNS_DROPPED_FOR_TESTS,
+)
+from pdi.data.types import Additional, GroupID, InputTarget, Split, COLUMN_DETECTOR
+from pdi.data.config import RUN, UNDERSAMPLE
+from pdi.data.utils import DataPreparation, GroupedDataPreparation
+from pdi.data.detector_helpers import columns_to_detectors_masked
 
 class DeletePreparation(DataPreparation):
-    """DeletePreparation preprocesses incomplete data by deleting incomplete examples
-    """
+    """DeletePreparation preprocesses incomplete data by deleting incomplete examples"""
 
     save_dir = f"{PROCESSED_DIR}/deleted"
 
@@ -37,7 +45,7 @@ class DeletePreparation(DataPreparation):
         """__init__
 
         Args:
-            complete_only (bool, optional): 
+            complete_only (bool, optional):
                 Given for consistency between different preparation classes.
                 Can only be True. Raises Exception if False.
 
@@ -46,31 +54,30 @@ class DeletePreparation(DataPreparation):
         """
         super().__init__()
         if not complete_only:
-            raise Exception(
-                "DeletePreparation can only prepare complete cases.")
+            raise ValueError("DeletePreparation can only prepare complete cases.")
 
     def _do_preprocess_split(self, split):
-        input = split[InputTarget.INPUT]
+        input_split = split[InputTarget.INPUT]
         targets = split[InputTarget.TARGET]
 
-        na_rows = input[input.isnull().any(axis=1)].index
+        na_rows = input_split[input_split.isnull().any(axis=1)].index
 
-        split[InputTarget.INPUT] = input.drop(index=na_rows)
+        split[InputTarget.INPUT] = input_split.drop(index=na_rows)
         split[InputTarget.TARGET] = targets.drop(index=na_rows)
 
         return super()._do_preprocess_split(split)
 
 
 class MeanImputation(DataPreparation):
-    """MeanImputation preprocesses incomplete data by imputing missing values with statistical means calculated on the train split.
-    """
+    """MeanImputation preprocesses incomplete data by imputing missing values with statistical means calculated on the train split."""
+
     save_dir = f"{PROCESSED_DIR}/mean"
 
     def __init__(self, complete_only: bool = False):
         """__init__
 
         Args:
-            complete_only (bool, optional): 
+            complete_only (bool, optional):
                 Given for consistency between different preparation classes.
                 Can only be False. Raises Exception if True.
                 Use DeletePreparation if only complete examples are required.
@@ -80,35 +87,32 @@ class MeanImputation(DataPreparation):
         """
         super().__init__()
         if complete_only:
-            raise Exception(
-                "Use DeletePreparation to only get complete cases.")
+            raise ValueError("Use DeletePreparation to only get complete cases.")
 
     def _do_process_data(self, data):
         self._mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
-        split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(
-            self._mean_df)
+        split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(self._mean_df)
         return super()._do_preprocess_split(split)
 
-    def save_data(self) -> None:
-        """save_data overrides base method. Additionally saves the mean values used in imputation. 
-        """
-        super().save_data()
+    def save_data(self, save_dir: str = None) -> None:
+        """save_data overrides base method. Additionally saves the mean values used in imputation."""
+        super().save_data(save_dir)
         self._mean_df.to_json(f"{self.save_dir}/column_mean.json", index=True)
 
 
 class RegressionImputation(DataPreparation):
-    """RegressionImputation preprocesses incomplete data by imputing missing values by using a linear regression model fitted on the train split.
-    """
+    """RegressionImputation preprocesses incomplete data by imputing missing values by using a linear regression model fitted on the train split."""
+
     save_dir = f"{PROCESSED_DIR}/regression"
 
     def __init__(self, complete_only: bool = False):
         """__init__
 
         Args:
-            complete_only (bool, optional): 
+            complete_only (bool, optional):
                 Given for consistency between different preparation classes.
                 Can only be False. Raises Exception if True.
                 Use DeletePreparation if only complete examples are required.
@@ -118,18 +122,22 @@ class RegressionImputation(DataPreparation):
         """
         super().__init__()
         if complete_only:
-            raise Exception(
-                "Use DeletePreparation to only get complete cases.")
+            raise ValueError("Use DeletePreparation to only get complete cases.")
         self._regression = LinearRegression()
 
     def _do_process_data(self, data):
         train_input = data[Split.TRAIN][InputTarget.INPUT]
 
-        train_input_n = train_input[train_input.columns[~train_input.columns.isin(NSIGMA_COLUMNS)]]
+        train_input_n = train_input[
+            train_input.columns[~train_input.columns.isin(COLUMNS_DROPPED_FOR_TESTS)]
+        ]
         self.missing_features = train_input_n.isnull().any()
+        print(self.missing_features.shape)
         complete = train_input_n.dropna()
-        self._regression.fit(complete.loc[:, ~self.missing_features],
-                             complete.loc[:, self.missing_features])
+        self._regression.fit(
+            complete.loc[:, ~self.missing_features],
+            complete.loc[:, self.missing_features],
+        )
         self.regression_params = {
             "missing": list(train_input_n.columns[self.missing_features]),
             "non_missing": list(train_input_n.columns[~self.missing_features]),
@@ -138,42 +146,60 @@ class RegressionImputation(DataPreparation):
         return super()._do_process_data(data)
 
     def _do_preprocess_split(self, split):
-        input = split[InputTarget.INPUT]
-        add_dict1 = {column: input.loc[:, [column.name]].values
-                    for column in Additional if column.name in NSIGMA_COLUMNS}
-        if len(input.columns) == N_COLUMNS_NSIGMAS:
-            input.drop(columns=NSIGMA_COLUMNS, inplace=True)
+        input_split = split[InputTarget.INPUT]
+        add_dict1 = {
+            column: input_split.loc[:, [column.name]].values
+            for column in Additional
+            if column.name in NSIGMA_COLUMNS
+        }
+        if len(input_split.columns) == N_COLUMNS_NSIGMAS:
+            input_split.drop(columns=NSIGMA_COLUMNS, inplace=True)
         targets = split[InputTarget.TARGET]
-        pred = self._regression.predict(input.loc[:, ~self.missing_features])
-        pred = pd.DataFrame(pred,
-                            columns=input.columns[self.missing_features],
-                            index=input.index)
-        add_dict = {column: input.loc[:, [column.name]].values
+        add_dict = {column: input_split.loc[:, [column.name]].values
                     for column in Additional if column.name not in NSIGMA_COLUMNS}
         add_dict.update(add_dict1)
 
-        input = input.fillna(pred)
+        input_split.drop(columns=COLUMNS_DROPPED_FOR_TESTS, inplace=True)
+
+        print(input_split.shape)
+        pred = self._regression.predict(input_split.loc[:, ~self.missing_features])
+        pred = pd.DataFrame(pred,
+                            columns=input_split.columns[self.missing_features],
+                            index=input_split.index)
+
+        columns_for_training = pd.Series(input_split.columns.tolist())
+        columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
+        self._columns_for_training = columns_for_training
+
+        with open(f"{self.save_dir}/columns_for_training.json", "w") as f:
+            f.write(json.dumps(
+                {
+                    "columns_for_training": self._columns_for_training.tolist()
+                }
+            ))
+
+        input_split = input_split.fillna(pred)
         return (
             {
-                InputTarget.INPUT: input.values,
+                InputTarget.INPUT: input_split.values,
                 InputTarget.TARGET: targets.values,
             },
-            add_dict
+            add_dict,
         )
 
-    def save_data(self) -> None:
-        """save_data overrides base method. Additionally saves the coefficients of the regression model used in imputation. 
-        """
-        super().save_data()
-        with open(f"{self.save_dir}/regression_coef.json", "wt") as file:
+    def save_data(self, save_dir: str = None) -> None:
+        """save_data overrides base method. Additionally saves the coefficients of the regression model used in imputation."""
+        super().save_data(save_dir)
+        with open(f"{self.save_dir}/regression_coef.json", "wt", encoding="UTF-8") as file:
             json.dump(self.regression_params, file)
 
 
 class EnsemblePreparation(GroupedDataPreparation):
-    """EnsemblePreparation groups incomplete data into separate complete datasets, based on the combinations of missing values.
-    """
+    """EnsemblePreparation groups incomplete data into separate complete datasets, based on the combinations of missing values."""
+
     save_dir = f"{PROCESSED_DIR}/ensemble"
-    COMPLETE_GROUP_ID = np.sum(2**np.arange(N_COLUMNS))
+    # TODO: remove hardcoded 19 (probably change group encoding somewhere)
+    COMPLETE_GROUP_ID = np.sum(2 ** np.arange(19))
 
     def __init__(self, complete_only: bool = False):
         """__init__
@@ -186,23 +212,26 @@ class EnsemblePreparation(GroupedDataPreparation):
     def _group_data(self, data):
         missing = data.isnull()
 
-        drop_columns = DROP_COLUMNS_BIG if len(data.columns) == N_COLUMNS_BIG else DROP_COLUMNS_SMALL
+        drop_columns = (
+            DROP_COLUMNS_BIG
+            if len(data.columns) == N_COLUMNS_BIG
+            else DROP_COLUMNS_SMALL
+        )
         missing.drop(columns=drop_columns, inplace=True)
         if len(missing.columns) == N_COLUMNS_NSIGMAS:
             missing.drop(columns=NSIGMA_COLUMNS, inplace=True)
+
         groups = missing.groupby(list(missing.columns), dropna=False).groups
 
         return {
-            GroupID(np.sum(2**np.arange(len(key)) * ~np.array(key))):
-            data.loc[val]
+            GroupID(np.sum(2 ** np.arange(len(key)) * ~np.array(key))): data.loc[val]
             for key, val in groups.items()
         }
 
     def _do_preprocess_split(self, split):
         input_data = split[InputTarget.INPUT]
         add_data = {
-            column: input_data.loc[:, [column.name]].values
-            for column in Additional
+            column: input_data.loc[:, [column.name]].values for column in Additional
         }
         if len(input_data.columns) == N_COLUMNS_NSIGMAS:
             input_data.drop(columns=NSIGMA_COLUMNS, inplace=True)
@@ -219,8 +248,8 @@ class EnsemblePreparation(GroupedDataPreparation):
 class FeatureSetPreparation(GroupedDataPreparation):
     """FeatureSetPreparation converts incomplete vectors into sets of feature-value pairs, which are grouped based on the number of pairs in the set.
     """
-    save_dir: str = f"{PROCESSED_DIR}/feature_set"
-    COMPLETE_GROUP_ID = GroupID(0)
+    save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
+    COMPLETE_GROUP_ID = GroupID(columns_to_detectors_masked(COLUMN_DETECTOR.keys()))
 
     def __init__(self, complete_only: bool = False):
         """__init__
@@ -231,38 +260,61 @@ class FeatureSetPreparation(GroupedDataPreparation):
         super().__init__(complete_only)
 
     def _group_data(self, data):
-        missing_values = data.isnull().sum(axis=1)
-        groups = data.groupby(missing_values.tolist(), dropna=False).groups
-        return {
-            GroupID(gid): data.loc[group_idx]
-            for gid, group_idx in groups.items()
-        }
+        cols = list(COLUMN_DETECTOR.keys())
+
+        col_combinations = []
+        for i in range(len(cols) + 1):
+            els = [list(x) for x in combinations(cols, i)]
+            col_combinations.extend(els)
+
+        print(f"Data shape: {data.shape}")
+        groups = {}
+        smallest_group_size = sys.maxsize * 2 + 1
+        for missing in col_combinations:
+            not_missing = list(filter(lambda i: i not in missing, cols)) # pylint: disable=cell-var-from-loop
+            group = data[
+                data[not_missing].notnull().all(1) & data[missing].isnull().all(1)
+            ]
+            if len(group.index) > 0:
+                key = columns_to_detectors_masked(not_missing)
+                groups[key] = group
+                group_size = len(group.index)
+                if group_size < smallest_group_size:
+                    smallest_group_size = group_size
+        print(f"Group count: {len(groups)}")
+
+        # undersampling
+        if UNDERSAMPLE:
+            for key in groups.keys():
+                to_drop = len(groups[key].index) - smallest_group_size
+                if to_drop > 0:
+                    groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
+                    groups[key].drop(groups[key].tail(to_drop).index, inplace=True)
+
+        return groups
 
     def _do_preprocess_split(self, split):
-
-        def make_feature_set(df):
-            rows, cols = df.shape
-            non_null_count = df.iloc[0].count()
-            features = non_null_count
-            is_not_null = pd.notnull(df)
-            feature_indices = np.nonzero(is_not_null.values)[-1]
-            one_hot_indices = np.reshape(
-                np.eye(N_COLUMNS)[feature_indices],
-                (rows, features, N_COLUMNS))
-            feature_values = np.reshape(df.values[is_not_null],
-                                        (rows, features, 1))
-            feature_set = np.concatenate((one_hot_indices, feature_values), -1)
-            return feature_set
-
         input_data = split[InputTarget.INPUT]
         add_data = {
-            column: input_data.loc[:, [column.name]].values
-            for column in Additional
+            column: input_data.loc[:, [column.name]].values for column in Additional
         }
         if len(input_data.columns) == N_COLUMNS_NSIGMAS:
             input_data.drop(columns=NSIGMA_COLUMNS, inplace=True)
+
+        input_data.drop(columns=COLUMNS_DROPPED_FOR_TESTS, inplace=True)
+
+        columns_for_training = pd.Series(input_data.columns.tolist())
+        columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
+        self._columns_for_training = columns_for_training
+
+        with open(f"{self.save_dir}/columns_for_training.json", "w") as f:
+            f.write(json.dumps(
+                {
+                    "columns_for_training": self._columns_for_training.tolist()
+                }
+            ))
         targets = split[InputTarget.TARGET]
-        return ({
-            InputTarget.INPUT: make_feature_set(input_data),
-            InputTarget.TARGET: targets.values
-        }, add_data)
+        return (
+            {InputTarget.INPUT: input_data.values, InputTarget.TARGET: targets.values},
+            add_data,
+        )
