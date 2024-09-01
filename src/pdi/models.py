@@ -9,10 +9,11 @@ NeuralNetEnsemble
 AttentionModel
     Attention-based model used for processing incomplete examples.
 """
+
 from typing import Optional
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch import Tensor
 from torch.nn.functional import one_hot
 
@@ -21,13 +22,11 @@ from pdi.data.types import GroupID
 
 
 class NeuralNet(nn.Module):
-    """NeuralNet is a basic neural network with variable layer dimensions, activation function and optional dropout.
-    """
+    """NeuralNet is a basic neural network with variable layer dimensions, activation function and optional dropout."""
 
-    def __init__(self,
-                 layers: list[int],
-                 activation: nn.Module,
-                 dropout: Optional[float] = None):
+    def __init__(
+        self, layers: list[int], activation: nn.Module, dropout: Optional[float] = None
+    ):
         """__init__
 
         Args:
@@ -35,9 +34,9 @@ class NeuralNet(nn.Module):
             activation (nn.Module): activation function
             dropout (Optional[float], optional): dropout rate. Defaults to None.
         """
-        super(NeuralNet, self).__init__()
+        super().__init__()
         self.layers = nn.ModuleList()
-        for (in_f, out_f) in zip(layers[:-2], layers[1:-1]):
+        for in_f, out_f in zip(layers[:-2], layers[1:-1]):
             self.layers.append(nn.Linear(in_f, out_f))
             self.layers.append(activation())
             if dropout is not None:
@@ -75,30 +74,29 @@ class NeuralNetEnsemble(nn.Module):
             activation (nn.Module, optional): Activation function. Defaults to nn.ReLU.
             dropout (float, optional): dropout rate. Defaults to 0.4.
         """
-        super(NeuralNetEnsemble, self).__init__()
-        self.models = nn.ModuleDict({
-            str(g_id): NeuralNet([bin(g_id).count("1")] + hidden_layers,
-                                 activation, dropout)
-            for g_id in group_ids
-        })
+        super().__init__()
+        self.models = nn.ModuleDict(
+            {
+                str(g_id): NeuralNet(
+                    [bin(g_id).count("1")] + hidden_layers, activation, dropout
+                )
+                for g_id in group_ids
+            }
+        )
 
     def forward(self, x: Tensor, group: Tensor):
-        group_np = group[0].numpy()[0]
-        group_str = str(group_np)
         if not torch.all(group == group[0]):
-            raise Exception(
-                "Not all tensors in batch belong to the same group.")
+            raise ValueError("Not all tensors in batch belong to the same group.")
         return self.models[str(group[0].numpy()[0])](x)
 
 
 class AttentionModel(nn.Module):
-    """AttentionModel is an attention-based model used for processing incomplete examples.
-    """
+    """AttentionModel is an attention-based model used for processing incomplete examples."""
 
     class _AttentionPooling(nn.Module):
 
         def __init__(self, in_dim, pool_dim, activation):
-            super(AttentionModel._AttentionPooling, self).__init__()
+            super().__init__()
             self.net = NeuralNet([in_dim, pool_dim, in_dim], activation)
             self.softmax = nn.Softmax(dim=1)
 
@@ -109,6 +107,29 @@ class AttentionModel(nn.Module):
             out = torch.mul(attention_weights, x)
             out = torch.sum(out, dim=-2)
             return out
+
+    class _VecToMat(nn.Module):
+        def __init__(self):
+            super().__init__()
+
+        def forward(self, x: Tensor) -> Tensor:
+            not_missing = ~torch.isnan(x)
+            not_missing_idx = not_missing.nonzero()[:, -1]
+            values = x[not_missing]
+
+            if x.dim() == 1:
+                feat_count = not_missing.nonzero().shape[0]
+                rows = 1
+            else:
+                feat_count = not_missing[0].nonzero().shape[0]
+                rows, _ = x.shape
+
+            oh = one_hot(not_missing_idx, N_COLUMNS) # pylint: disable=not-callable
+            one_hot_indices = oh.reshape(rows, feat_count, N_COLUMNS)
+
+            values = values.reshape(rows, feat_count, 1)
+            result = torch.cat((one_hot_indices, values), -1)
+            return result
 
     def __init__(
         self,
@@ -135,23 +156,21 @@ class AttentionModel(nn.Module):
             activation (nn.Module, optional): activation function. Defaults to nn.ReLU.
             dropout (float, optional): dropout rate. Defaults to 0.4.
         """
-        super(AttentionModel, self).__init__()
+        super().__init__()
+        self.to_feature_set = AttentionModel._VecToMat()
         self.emb = NeuralNet([in_dim, embed_hidden, embed_dim], activation)
         self.drop = nn.Dropout(dropout)
-        encoder_layer = nn.TransformerEncoderLayer(embed_dim,
-                                                   num_heads,
-                                                   ff_hidden,
-                                                   dropout,
-                                                   activation(),
-                                                   batch_first=True)
-        self.encoder = nn.TransformerEncoder(encoder_layer,
-                                             num_blocks,
-                                             enable_nested_tensor=False)
-        self.pool = AttentionModel._AttentionPooling(embed_dim, pool_hidden,
-                                                     activation)
+        encoder_layer = nn.TransformerEncoderLayer(
+            embed_dim, num_heads, ff_hidden, dropout, activation(), batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, num_blocks, enable_nested_tensor=False
+        )
+        self.pool = AttentionModel._AttentionPooling(embed_dim, pool_hidden, activation)
         self.net = NeuralNet([embed_dim, pool_hidden, 1], activation)
 
-    def forward(self, x: Tensor, group_ids: Optional[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.to_feature_set(x)
         x = self.emb(x)
         x = self.drop(x)
         x = self.encoder(x)
@@ -160,14 +179,8 @@ class AttentionModel(nn.Module):
         return x
 
     def predict(self, incomplete_tensor: Tensor) -> Tensor:
-        missing = torch.isnan(incomplete_tensor)
-        non_missing_idx = torch.argwhere(~missing)
+        return self.forward(incomplete_tensor)
 
-        features = one_hot(non_missing_idx, N_COLUMNS).squeeze()
-        values = incomplete_tensor[non_missing_idx]
-
-        input = torch.cat((features, values), dim=-1)
-        return self.forward(input)
 
 class Traditional:
     pass

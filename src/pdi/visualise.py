@@ -9,6 +9,7 @@ plot_purity_comparison
 plot_efficiency_comparison
     Plots efficiency (recall) graph depending on the momentum of the particles.
 """
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -24,7 +25,10 @@ def plot_precision_recall_comparison(target_name, data_dict, save_dir=None):
         preds = results["predictions"]
         precision, recall, _ = precision_recall_curve(targets, preds)
         plt.plot(recall, precision, "o", label=method_name)
-        df = pd.DataFrame(columns=["recall", "precision"], data=np.transpose(np.vstack((recall, precision))))
+        df = pd.DataFrame(
+            columns=["recall", "precision"],
+            data=np.transpose(np.vstack((recall, precision))),
+        )
         df.to_csv(f"{save_dir}/precision_recall.csv", sep=",", float_format="%.5f")
 
     plt.xlabel("Recall")
@@ -43,14 +47,12 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
     df = pd.DataFrame()
     for method_name, results in data_dict.items():
         targets = results["targets"]
-        preds = results["predictions"]
         fP = results["momentum"]
-        threshold = results["threshold"]
+        selected = results["selected"]
 
-        selected = preds > threshold
-
-        purities_p_plot, _, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, selected, fP, intervals)
+        purities_p_plot, _, confidence_intervals, momenta_avg = (
+            get_interval_purity_efficiency(targets, selected, fP, intervals)
+        )
 
         p = plt.plot(momenta_avg, purities_p_plot, "o", label=method_name)
         plt.fill_between(
@@ -62,11 +64,13 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
         )
 
         df[f"Purity {method_name}"] = pd.Series(purities_p_plot)
-        df[f"P {method_name}"] = pd.Series(momenta_avg)
+        df[f"Pt {method_name}"] = pd.Series(momenta_avg)
 
-    df.to_csv(f"{save_dir}/p_purity_optimized_threshold.csv", sep=",", float_format="%.5f")
+    df.to_csv(
+        f"{save_dir}/p_purity_optimized_threshold.csv", sep=",", float_format="%.5f"
+    )
 
-    plt.xlabel("p (GeV/c)")
+    plt.xlabel("pt (GeV/c)")
     plt.ylabel("Purity")
     plt.ylim([0, 1.1])
 
@@ -78,22 +82,17 @@ def plot_purity_comparison(target_name, data_dict, intervals, save_dir=None):
     plt.close()
 
 
-def plot_efficiency_comparison(target_name,
-                               data_dict,
-                               intervals,
-                               save_dir=None):
+def plot_efficiency_comparison(target_name, data_dict, intervals, save_dir=None):
     plt.figure()
     df = pd.DataFrame()
     for method_name, results in data_dict.items():
         targets = results["targets"]
-        preds = results["predictions"]
         fP = results["momentum"]
-        threshold = results["threshold"]
+        selected = results["selected"]
 
-        selected = preds > threshold
-
-        _, efficiencies_p_plot, confidence_intervals, momenta_avg = get_interval_purity_efficiency(
-            targets, selected, fP, intervals)
+        _, efficiencies_p_plot, confidence_intervals, momenta_avg = (
+            get_interval_purity_efficiency(targets, selected, fP, intervals)
+        )
 
         p = plt.plot(momenta_avg, efficiencies_p_plot, "o", label=method_name)
         plt.fill_between(
@@ -105,16 +104,32 @@ def plot_efficiency_comparison(target_name,
         )
 
         df[f"Efficiency {method_name}"] = pd.Series(efficiencies_p_plot)
-        df[f"P {method_name}"] = pd.Series(momenta_avg)
+        df[f"Pt {method_name}"] = pd.Series(momenta_avg)
 
-    df.to_csv(f"{save_dir}/p_efficiency_optimized_threshold.csv", sep=",", float_format="%.5f")
+    df.to_csv(
+        f"{save_dir}/p_efficiency_optimized_threshold.csv", sep=",", float_format="%.5f"
+    )
 
-    plt.xlabel("p (GeV/c)")
+    plt.xlabel("pt (GeV/c)")
     plt.ylabel("Efficiency")
     plt.ylim([0, 1.1])
     plt.title(f"{target_name} classification")
     plt.legend(loc="lower left")
     if save_dir is not None:
         plt.savefig(f"{save_dir}/p_efficiency_optimized_threshold.png")
+    plt.show()
+    plt.close()
+
+
+def plot_learning_curve(
+    loss: list[float], val_loss: list[float], label: str = None, save_dir: str = None
+):
+    plt.plot(loss)
+    plt.plot(val_loss)
+    plt.title(f"Learning curve {label}")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend(["Loss", "Val_Loss"])
+    plt.savefig(f"{save_dir}/loss_{label}")
     plt.show()
     plt.close()
