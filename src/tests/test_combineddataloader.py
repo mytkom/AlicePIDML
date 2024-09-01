@@ -2,7 +2,6 @@ import unittest
 
 from pdi.data.utils import CombinedDataLoader
 
-
 class TestCombinedDataLoader(unittest.TestCase):
 
     def setUp(self):
@@ -13,7 +12,7 @@ class TestCombinedDataLoader(unittest.TestCase):
     def test_iter(self):
         out = list(iter(self.combined))
 
-        for i in (self.d1 + self.d2):
+        for i in self.d1 + self.d2:
             self.assertIn(i, out)
 
     def test_len(self):

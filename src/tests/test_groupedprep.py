@@ -1,32 +1,39 @@
 import unittest
+from unittest.mock import Mock
 import torch
 import pandas as pd
 import numpy as np
-from pdi.data.constants import (COLUMNS_TO_SCALE, DROP_COLUMNS, MISSING_VALUES,
-                                TARGET_COLUMN, GROUP_ID_KEY)
+from pdi.data.constants import (
+    COLUMNS_TO_SCALE,
+    DROP_COLUMNS,
+    MISSING_VALUES,
+    TARGET_COLUMN,
+    GROUP_ID_KEY,
+)
 from pdi.data.types import Additional, GroupID, Split
 from pdi.data.utils import GroupedDataPreparation
-
-from unittest.mock import Mock
-
 
 class TestGroupedDataPreparation(unittest.TestCase):
 
     def setUp(self):
-        columns = COLUMNS_TO_SCALE + list(MISSING_VALUES.keys(
-        )) + DROP_COLUMNS + [i.name for i in Additional]
+        columns = (
+            COLUMNS_TO_SCALE
+            + list(MISSING_VALUES.keys())
+            + DROP_COLUMNS
+            + [i.name for i in Additional]
+        )
         columns.remove(TARGET_COLUMN)
 
-        self.mock_data = pd.DataFrame({
-            **{
-                TARGET_COLUMN: [0] * 800 + [1] * 200 + [2] * 1000,
-            },
-            **{c: 10 * np.random.rand((2000)) + 20
-               for c in columns}
-        })
+        self.mock_data = pd.DataFrame(
+            {
+                **{
+                    TARGET_COLUMN: [0] * 800 + [1] * 200 + [2] * 1000,
+                },
+                **{c: 10 * np.random.rand((2000)) + 20 for c in columns},
+            }
+        )
 
-        self.mock_data.loc[self.mock_data[TARGET_COLUMN] == 2,
-                           columns[0]] = np.nan
+        self.mock_data.loc[self.mock_data[TARGET_COLUMN] == 2, columns[0]] = np.nan
 
         def groupby(data):
             missing = data.isnull().any(axis="columns")
@@ -62,7 +69,7 @@ class TestGroupedDataPreparation(unittest.TestCase):
 
         prep.prepare_data()
 
-        (dataloader, ) = prep.prepare_dataloaders(64, 0, [Split.TRAIN])
+        (dataloader,) = prep.prepare_dataloaders(64, 0, [Split.TRAIN])
 
         for _, target, _ in dataloader:
             self.assertTrue(torch.all(target != 2))
@@ -76,17 +83,16 @@ class TestGroupedDataPreparation(unittest.TestCase):
 
         prep.prepare_data()
 
-        (dataloader, ) = prep.prepare_dataloaders(64, 0, [Split.TRAIN])
+        (dataloader,) = prep.prepare_dataloaders(64, 0, [Split.TRAIN])
 
         train_cases = 0
 
         for _, target, add in dataloader:
             train_cases += target.squeeze().size()[0]
-            for class_ in target_count.keys():
+            for class_ in target_count:
                 target_count[class_] += torch.sum(target == class_).item()
 
-            self.assertTrue(
-                torch.all(add[GROUP_ID_KEY] == add[GROUP_ID_KEY][0]))
+            self.assertTrue(torch.all(add[GROUP_ID_KEY] == add[GROUP_ID_KEY][0]))
 
             if add[GROUP_ID_KEY][0] == 0:
                 self.assertTrue(torch.all(target != 2))

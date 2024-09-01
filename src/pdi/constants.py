@@ -3,12 +3,12 @@
 
 PARTICLES_DICT = {
     11: "electron",
-    13: "mion",
+    13: "muon",
     211: "pion",
     321: "kaon",
     2212: "proton",
     -11: "antielectron",
-    -13: "antimion",
+    -13: "antimuon",
     -211: "antipion",
     -321: "antikaon",
     -2212: "antiproton",
