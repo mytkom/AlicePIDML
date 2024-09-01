@@ -22,8 +22,8 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from pdi.data.constants import GROUP_ID_KEY, PART_DICT
-from pdi.data.types import Additional
+from pdi.data.constants import PART_DICT, P_CUT, GROUP_ID_KEY
+from pdi.models import NeuralNetEnsemble
 
 
 def get_nsigma_predictions_data(
@@ -47,13 +47,17 @@ def get_nsigma_predictions_data(
 
     nsigma_tpc_col = "fTPCNSigma" + PART_DICT[abs(target_code)]
     nsigma_tof_col = "fTOFNSigma" + PART_DICT[abs(target_code)]
-    for input_data, target, data_dict in tqdm(dataloader):
-        nsigmas = abs(data_dict[nsigma_tpc_col])
-        nsigmas = np.sqrt(pow(data_dict[nsigma_tpc_col], 2) +\
-                          pow(data_dict[nsigma_tof_col], 2)) \
-                  .where(data_dict["fPt"] > 0.5f, nsigmas)
-        nsigmas[data_dict[nsigma_tpc_col] == -999] = np.nan
-        nsigmas[data_dict[nsigma_tof_col] == -999 and data_dict["fPt"] > 0.5f] = np.nan
+
+    for _, target, data_dict in tqdm(dataloader):
+        tpc = abs(data_dict[nsigma_tpc_col])
+        nsigmas = (
+            np.sqrt(
+                pow(data_dict[nsigma_tpc_col], 2) + pow(data_dict[nsigma_tof_col], 2)
+            )
+            .where(data_dict["fP"] > P_CUT, tpc)
+            .where(~data_dict["fBeta"].isnan(), tpc)
+        )
+        # where puts value from second argument when condition is false
 
         predictions.extend(nsigmas.cpu().detach().numpy())
         targets.extend(target.numpy())
@@ -86,31 +90,33 @@ def get_predictions_data_and_loss(
         target_code (int, optional). Defaults to None.
 
     Returns:
-        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float]: 
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float]:
             array of predictions, array of targets, dictionary of additional data for analysis, loss value
     """
     predictions = []
     targets = []
     additional_data = {}
     val_loss = 0.0
+    count = 0
 
     model.eval()
-    for i in range(1):
-    # with torch.no_grad():
+    for _ in range(1):
+        # with torch.no_grad():
         for input_data, target, data_dict in tqdm(dataloader):
-            #prediction
+            # prediction
             input_data = input_data.to(device)
             group_id = data_dict.get(GROUP_ID_KEY)
-            if group_id is None:
-                out = model(input_data)
-            else:
+            # TODO: move NNEnsemble group choice inside model
+            if isinstance(model, NeuralNetEnsemble):
                 out = model(input_data, group_id)
-            #loss
+            else:
+                out = model(input_data)
+            # loss
             if loss_fun and target_code:
-                binary_target = (target == target_code).type(
-                    torch.float).to(device)
+                binary_target = (target == target_code).type(torch.float).to(device)
                 val_loss += loss_fun(out, binary_target).item()
-            #save data
+                count += 1
+            # save data
             predict_target = torch.sigmoid(out)
             predictions.extend(predict_target.cpu().detach().numpy())
             targets.extend(target.cpu().numpy())
@@ -123,7 +129,10 @@ def get_predictions_data_and_loss(
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
     dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
 
-    return predictions_arr, targets_arr, dict_arr, val_loss
+    if count == 0:
+        count = 1
+
+    return predictions_arr, targets_arr, dict_arr, val_loss / count
 
 
 def validate_model(
@@ -147,19 +156,19 @@ def validate_model(
     """
 
     predictions, targets, _, val_loss = get_predictions_data_and_loss(
-        model, validation_loader, device, loss_fun, target_code)
-    binary_targets = (targets == target_code)
+        model, validation_loader, device, loss_fun, target_code
+    )
+    binary_targets = targets == target_code
 
-    val_f1, val_prec, val_rec, var_thres = _maximize_f1(
-        binary_targets, predictions)
+    val_f1, val_prec, val_rec, var_thres = _maximize_f1(binary_targets, predictions)
 
     return val_loss, val_f1, val_prec, val_rec, var_thres
 
 
-def _maximize_f1(binary_targets: NDArray[np.float32],
-                 predictions: NDArray[np.float32]) -> tuple[float, ...]:
-    precision, recall, thresholds = precision_recall_curve(
-        binary_targets, predictions)
+def _maximize_f1(
+    binary_targets: NDArray[np.float32], predictions: NDArray[np.float32]
+) -> tuple[float, ...]:
+    precision, recall, thresholds = precision_recall_curve(binary_targets, predictions)
     f1 = 2 * precision * recall / (precision + recall + np.finfo(float).eps)
     argmax = np.argmax(f1)
     return f1[argmax], precision[argmax], recall[argmax], thresholds[argmax]
@@ -175,7 +184,7 @@ def _split_particles_intervals(
     selected_intervals = []
     momenta = []
 
-    for (p_min, p_max) in intervals:
+    for p_min, p_max in intervals:
         indices = (momentum < p_max) & (momentum >= p_min)
         targets_intervals.append(binary_targets[indices])
         selected_intervals.append(selected[indices])
@@ -199,12 +208,13 @@ def get_interval_purity_efficiency(
         intervals (list[tuple[float, float]]): momentum intevals
 
     Returns:
-        tuple[list[float], list[float], pd.DataFrame, list[float]]: 
+        tuple[list[float], list[float], pd.DataFrame, list[float]]:
             array of purities, array of efficiencies, confidence intervals, middle values of each interval
     """
 
     targets_intervals, selected_intervals, avg_momenta = _split_particles_intervals(
-        binary_targets, selected, momentum, intervals)
+        binary_targets, selected, momentum, intervals
+    )
 
     purities_p_plot = []
     efficiencies_p_plot = []
@@ -218,12 +228,16 @@ def get_interval_purity_efficiency(
         confidence_intervals = pd.concat(
             [
                 confidence_intervals,
-                pd.DataFrame([{
-                    "purity_lower": p_ci[0],
-                    "purity_upper": p_ci[1],
-                    "efficiency_lower": e_ci[0],
-                    "efficiency_upper": e_ci[1],
-                }])
+                pd.DataFrame(
+                    [
+                        {
+                            "purity_lower": p_ci[0],
+                            "purity_upper": p_ci[1],
+                            "efficiency_lower": e_ci[0],
+                            "efficiency_upper": e_ci[1],
+                        }
+                    ]
+                ),
             ],
             ignore_index=True,
         )
@@ -234,7 +248,7 @@ def get_interval_purity_efficiency(
 
 
 def calculate_precision_recall(
-        tp: int, pp: int, p: int
+    tp: int, pp: int, p: int
 ) -> tuple[float, float, tuple[float, float], tuple[float, float]]:
     """calculate_precision_recall
 
@@ -244,7 +258,7 @@ def calculate_precision_recall(
         p (int): number of actual positives
 
     Returns:
-        tuple[float, float, tuple[float, float], tuple[float, float]]: 
+        tuple[float, float, tuple[float, float], tuple[float, float]]:
             precision, recall, precision confidence interval, recall confidence interval
     """
     eps = float(np.finfo(float).eps)
@@ -257,7 +271,7 @@ def calculate_precision_recall(
 
 
 def _calculate_ci(tp: int, n: int) -> tuple[float, float]:
-    #Estimate confidence interval for Bernoulli p
+    # Estimate confidence interval for Bernoulli p
     eps = float(np.finfo(float).eps)
 
     p_hat = float(tp) / (n + eps)
