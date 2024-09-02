@@ -197,7 +197,7 @@ class DataPreparation:
 
     def _normalize_data(self, data):
         for column in data.columns:
-            if column in DO_NOT_SCALE or NSIGMA_COLUMNS:
+            if column in DO_NOT_SCALE or column in NSIGMA_COLUMNS:
                 continue
             mean = np.mean(data[column])
             std = np.std(data[column])
