@@ -6,31 +6,22 @@ from typing import MutableMapping, NewType
 
 from torch import Tensor
 
-from pdi.data.constants import PART_DICT
-from pdi.data.config import RUN
+from pdi.data.constants import NSIGMA_COLUMNS
+from pdi.data.config import GET_NSIGMA
 
 Split = Enum("Split", ["TRAIN", "VAL", "TEST"])
 InputTarget = Enum("InputTarget", ["INPUT", "TARGET"])
-Additional_Run2 = Enum(
-    "Additional",
-    [
-        "fP",
-        "fTPCSignal",
-        "fBeta",
-        "fPt",
-        "fSign",
-        *["fTPCNSigma" + val for val in PART_DICT.values()],
-        *["fTOFNSigma" + val for val in PART_DICT.values()],
-    ],
-)
+Additional_list = [
+    "fP",
+    "fTPCSignal",
+    "fBeta",
+    "fPt",
+    "fSign",
+]
 
-Additional_Run3 = Enum(
-    "Additional",
-    ["fP", "fTPCSignal", "fBeta", "fPt", "fSign",
-    ],
-)
-
-Additional = Additional_Run3 if RUN == 3 else Additional_Run2
+if GET_NSIGMA:
+    Additional_list += NSIGMA_COLUMNS
+Additional = Enum("Additional", Additional_list)
 
 GroupID = NewType("GroupID", int)
 
