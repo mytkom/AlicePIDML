@@ -288,6 +288,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
             for key in groups.keys():
                 to_drop = len(groups[key].index) - smallest_group_size
                 if to_drop > 0:
+                    # TODO: set configurable seed for sampling to get repeatable results
                     groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
                     groups[key].drop(groups[key].tail(to_drop).index, inplace=True)
 

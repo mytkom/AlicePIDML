@@ -240,7 +240,6 @@ class DataPreparation:
     def _input_target_split(self, data):
         def do_split(data):
             targets = data.loc[:, [TARGET_COLUMN]]
-            # input_data = data.drop(columns=DROP_COLUMNS)
             if len(data.columns) == N_COLUMNS_BIG:
                 input_data = data.drop(columns=DROP_COLUMNS_BIG)
             elif len(data.columns) == N_COLUMNS_SMALL:
