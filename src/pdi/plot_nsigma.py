@@ -19,24 +19,25 @@ PART_DICT = {
 }
 NSIGMA_COLUMNS = [
     *["fTPCNSigma" + val for val in PART_DICT.values()],
-    *["fTOFNSigma" + val for val in PART_DICT.values()]]
+    *["fTOFNSigma" + val for val in PART_DICT.values()],
+]
 
 SIGN_CONDS = {
-        "pos": lambda sign: sign == 1,
-        "neu": lambda sign: sign == 0,
-        "neg": lambda sign: sign == -1,
-        "all": lambda sign: True
+    "pos": lambda sign: sign == 1,
+    "neu": lambda sign: sign == 0,
+    "neg": lambda sign: sign == -1,
+    "all": lambda sign: True,
 }
 
 CSV_DELIMITER = ","
 
 df = pd.read_csv(INPUT_PATH, sep=CSV_DELIMITER, index_col=0)
 
-for part in PART_DICT:
+for part_pdg, part_label in PART_DICT.items():
     for det in ["fTPCNSigma", "fTOFNSigma"]:
-        for sign in SIGN_CONDS:
-            df_part = df.loc[(df["fPdgCode"] == part) & (SIGN_CONDS[sign](df["fSign"]))]
-            nsigma = det + PART_DICT[part]
+        for sign, sign_cond in SIGN_CONDS.items():
+            df_part = df.loc[(df["fPdgCode"] == part_pdg) & (sign_cond(df["fSign"]))]
+            nsigma = det + part_label
             count = df_part[nsigma].size
 
             if count < 100:
@@ -55,11 +56,15 @@ for part in PART_DICT:
                 norm="log",
                 aspect="auto",
                 ax=ax,
-                )
+            )
             plt.colorbar(dsartist, label="entries")
-            plt.figtext(0.48, 0.69, f"Entries    {count}\nMean x     {mean_x}\nStd Dev x   {std_dev_x}\n"\
-                        f"Mean y    {mean_y}\nStd Dev y   {std_dev_y}",
-                        bbox={"facecolor":"white", "pad":5})
+            plt.figtext(
+                0.48,
+                0.69,
+                f"Entries    {count}\nMean x     {mean_x}\nStd Dev x   {std_dev_x}\n"
+                f"Mean y    {mean_y}\nStd Dev y   {std_dev_y}",
+                bbox={"facecolor": "white", "pad": 5},
+            )
 
             plt.xlim([0.0, 5.0])
             plt.ylim([-3.5, 3.5])
