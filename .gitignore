@@ -1,7 +1,9 @@
 data/processed/*
 data/raw/*
 reports/*
+models/*
+onnx/*
 **/__pycache__
 wandb
-.*
 !**/.gitkeep
+pdiVEnv/*

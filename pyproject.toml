@@ -3,7 +3,6 @@ name = "pdi"
 version = "0.1.0"
 description = ""
 authors = ["Milosz Pawel Kasak <m.kasak@stud.elka.pw.edu.pl>"]
-readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
