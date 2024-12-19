@@ -7,3 +7,4 @@ onnx/*
 wandb
 !**/.gitkeep
 pdiVEnv/*
+.venv

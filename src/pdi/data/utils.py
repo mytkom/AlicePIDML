@@ -278,12 +278,6 @@ class DataPreparation:
         columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
         self._columns_for_training = columns_for_training
 
-        with open(f"{self.save_dir}/columns_for_training.json", "w+") as f:
-            f.write(json.dumps(
-                {
-                    "columns_for_training": self._columns_for_training.tolist()
-                }
-            ))
         return (
             {
                 InputTarget.INPUT: input_split.values,

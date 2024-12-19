@@ -129,7 +129,7 @@ class RegressionImputation(DataPreparation):
         train_input = data[Split.TRAIN][InputTarget.INPUT]
 
         train_input_n = train_input[
-            train_input.columns[~train_input.columns.isin(COLUMNS_DROPPED_FOR_TESTS)]
+            train_input.columns[~train_input.columns.isin(COLUMNS_DROPPED_FOR_TESTS + NSIGMA_COLUMNS)]
         ]
         self.missing_features = train_input_n.isnull().any()
         print(self.missing_features.shape)
@@ -170,13 +170,6 @@ class RegressionImputation(DataPreparation):
         columns_for_training = pd.Series(input_split.columns.tolist())
         columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
         self._columns_for_training = columns_for_training
-
-        with open(f"{self.save_dir}/columns_for_training.json", "w+") as f:
-            f.write(json.dumps(
-                {
-                    "columns_for_training": self._columns_for_training.tolist()
-                }
-            ))
 
         input_split = input_split.fillna(pred)
         return (
@@ -308,14 +301,20 @@ class FeatureSetPreparation(GroupedDataPreparation):
         columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
         self._columns_for_training = columns_for_training
 
-        with open(f"{self.save_dir}/columns_for_training.json", "w+") as f:
-            f.write(json.dumps(
-                {
-                    "columns_for_training": self._columns_for_training.tolist()
-                }
-            ))
         targets = split[InputTarget.TARGET]
         return (
             {InputTarget.INPUT: input_data.values, InputTarget.TARGET: targets.values},
             add_data,
         )
+
+    def save_data(self, save_dir: str = None) -> None:
+        super().save_data(save_dir)
+
+        with open(f"{self.save_dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
+            f.write(
+                json.dumps(
+                    {"columns_for_training": self._columns_for_training.tolist()}
+                )
+            )
+
+        return
