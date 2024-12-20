@@ -175,7 +175,7 @@ class DataPreparation:
         return pd.read_csv(input_path, sep=CSV_DELIMITER, index_col=0)
 
     def _delete_unique_targets(self, data):
-        THRESHOLD = 200
+        THRESHOLD = 400
         target_counts = data[TARGET_COLUMN].value_counts()
         for target, count in target_counts.items():
             if count < THRESHOLD:
