@@ -244,12 +244,13 @@ class FeatureSetPreparation(GroupedDataPreparation):
     save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
     COMPLETE_GROUP_ID = GroupID(columns_to_detectors_masked(COLUMN_DETECTOR.keys()))
 
-    def __init__(self, complete_only: bool = False):
+    def __init__(self, complete_only: bool = False, undersample: bool = True):
         """__init__
 
         Args:
             complete_only (bool, optional): Whether to return only the group with complete examples. Defaults to False.
         """
+        self.UNDERSAMPLE = undersample
         super().__init__(complete_only)
 
     def _group_data(self, data):
