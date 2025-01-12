@@ -241,7 +241,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
     
     COMPLETE_GROUP_ID = GroupID(columns_to_detectors_masked(COLUMN_DETECTOR.keys()))
 
-    def __init__(self, complete_only: bool = False, base_dir = PROCESSED_DIR):
+    def __init__(self, complete_only: bool = False, base_dir = PROCESSED_DIR, undersample: bool = UNDERSAMPLE):
         """__init__
 
         Args:
