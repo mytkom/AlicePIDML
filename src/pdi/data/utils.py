@@ -132,13 +132,12 @@ class DataPreparation:
         prepare_dataloaders: create dataloaders from preprocessed data.
     """
 
-    save_dir = f"{PROCESSED_DIR}/basic"
-
-    def __init__(self) -> None:
+    def __init__(self, base_dir = PROCESSED_DIR) -> None:
         self._scaling_params = pd.DataFrame(columns=["column", "mean", "std"])
         self._columns_for_training = None
         self._input_target = {}
         self._additional = {}
+        self.save_dir = f"{base_dir}/basic/run{RUN}"
 
     def pos_weight(self, target: int) -> float:
         """pos_weight returns the ratio between the negative and positive samples in the train split.
@@ -286,12 +285,11 @@ class DataPreparation:
             add_dict,
         )
 
-    def save_data(self, save_dir: str = None) -> None:
+    def save_data(self) -> None:
         """save_data saves preprocessed data, as well as scaling parameters, to disk.
         Save location is given in the class variable `save_dir`
         """
-        if save_dir is not None:
-            self.save_dir = save_dir
+
         os.makedirs(self.save_dir, exist_ok=True)
         for split, it_data in self._input_target.items():
             with gzip.open(
@@ -449,9 +447,7 @@ class GroupedDataPreparation(DataPreparation):
     def _group_data(self, _):
         return {}
 
-    def save_data(self, save_dir: str = None) -> None:
-        if save_dir is not None:
-            self.save_dir = save_dir
+    def save_data(self) -> None:
         os.makedirs(self.save_dir, exist_ok=True)
 
         def save_dict(name, dictionary):

@@ -39,9 +39,7 @@ from pdi.data.detector_helpers import columns_to_detectors_masked
 class DeletePreparation(DataPreparation):
     """DeletePreparation preprocesses incomplete data by deleting incomplete examples"""
 
-    save_dir = f"{PROCESSED_DIR}/deleted"
-
-    def __init__(self, complete_only: bool = True):
+    def __init__(self, complete_only: bool = True, base_dir = PROCESSED_DIR):
         """__init__
 
         Args:
@@ -52,6 +50,7 @@ class DeletePreparation(DataPreparation):
         Raises:
             Exception: raised if complete_only=False.
         """
+        self.save_dir = f"{base_dir}/deleted/run{RUN}"
         super().__init__()
         if not complete_only:
             raise ValueError("DeletePreparation can only prepare complete cases.")
@@ -71,9 +70,7 @@ class DeletePreparation(DataPreparation):
 class MeanImputation(DataPreparation):
     """MeanImputation preprocesses incomplete data by imputing missing values with statistical means calculated on the train split."""
 
-    save_dir = f"{PROCESSED_DIR}/mean"
-
-    def __init__(self, complete_only: bool = False):
+    def __init__(self, complete_only: bool = False, base_dir = PROCESSED_DIR):
         """__init__
 
         Args:
@@ -88,6 +85,8 @@ class MeanImputation(DataPreparation):
         super().__init__()
         if complete_only:
             raise ValueError("Use DeletePreparation to only get complete cases.")
+        
+        self.save_dir = f"{base_dir}/mean/run{RUN}"
 
     def _do_process_data(self, data):
         self._mean_df = data[Split.TRAIN][InputTarget.INPUT].mean()
@@ -97,18 +96,16 @@ class MeanImputation(DataPreparation):
         split[InputTarget.INPUT] = split[InputTarget.INPUT].fillna(self._mean_df)
         return super()._do_preprocess_split(split)
 
-    def save_data(self, save_dir: str = None) -> None:
+    def save_data(self) -> None:
         """save_data overrides base method. Additionally saves the mean values used in imputation."""
-        super().save_data(save_dir)
+        super().save_data()
         self._mean_df.to_json(f"{self.save_dir}/column_mean.json", index=True)
 
 
 class RegressionImputation(DataPreparation):
     """RegressionImputation preprocesses incomplete data by imputing missing values by using a linear regression model fitted on the train split."""
 
-    save_dir = f"{PROCESSED_DIR}/regression"
-
-    def __init__(self, complete_only: bool = False):
+    def __init__(self, complete_only: bool = False, base_dir = PROCESSED_DIR):
         """__init__
 
         Args:
@@ -124,6 +121,7 @@ class RegressionImputation(DataPreparation):
         if complete_only:
             raise ValueError("Use DeletePreparation to only get complete cases.")
         self._regression = LinearRegression()
+        self.save_dir = f"{base_dir}/regression/run{RUN}"
 
     def _do_process_data(self, data):
         train_input = data[Split.TRAIN][InputTarget.INPUT]
@@ -180,9 +178,9 @@ class RegressionImputation(DataPreparation):
             add_dict,
         )
 
-    def save_data(self, save_dir: str = None) -> None:
+    def save_data(self) -> None:
         """save_data overrides base method. Additionally saves the coefficients of the regression model used in imputation."""
-        super().save_data(save_dir)
+        super().save_data()
         with open(f"{self.save_dir}/regression_coef.json", "wt", encoding="UTF-8") as file:
             json.dump(self.regression_params, file)
 
@@ -190,7 +188,6 @@ class RegressionImputation(DataPreparation):
 class EnsemblePreparation(GroupedDataPreparation):
     """EnsemblePreparation groups incomplete data into separate complete datasets, based on the combinations of missing values."""
 
-    save_dir = f"{PROCESSED_DIR}/ensemble"
     # TODO: remove hardcoded 19 (probably change group encoding somewhere)
     COMPLETE_GROUP_ID = np.sum(2 ** np.arange(19))
 
@@ -201,6 +198,7 @@ class EnsemblePreparation(GroupedDataPreparation):
             complete_only (bool, optional): Whether to return only the group with complete examples. Defaults to False.
         """
         super().__init__(complete_only)
+        self.save_dir = f"{PROCESSED_DIR}/ensemble/run{RUN}"
 
     def _group_data(self, data):
         missing = data.isnull()
@@ -239,12 +237,11 @@ class EnsemblePreparation(GroupedDataPreparation):
 
 
 class FeatureSetPreparation(GroupedDataPreparation):
-    """FeatureSetPreparation converts incomplete vectors into sets of feature-value pairs, which are grouped based on the number of pairs in the set.
-    """
-    save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
+    """FeatureSetPreparation converts incomplete vectors into sets of feature-value pairs, which are grouped based on the number of pairs in the set."""
+    
     COMPLETE_GROUP_ID = GroupID(columns_to_detectors_masked(COLUMN_DETECTOR.keys()))
 
-    def __init__(self, complete_only: bool = False, undersample: bool = UNDERSAMPLE):
+    def __init__(self, complete_only: bool = False, base_dir = PROCESSED_DIR, undersample: bool = UNDERSAMPLE):
         """__init__
 
         Args:
@@ -252,6 +249,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
         """
         self.undersample = undersample
         super().__init__(complete_only)
+        self.save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
 
     def _group_data(self, data):
         cols = list(COLUMN_DETECTOR.keys())
@@ -308,8 +306,8 @@ class FeatureSetPreparation(GroupedDataPreparation):
             add_data,
         )
 
-    def save_data(self, save_dir: str = None) -> None:
-        super().save_data(save_dir)
+    def save_data(self) -> None:
+        super().save_data()
 
         with open(f"{self.save_dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
             f.write(
