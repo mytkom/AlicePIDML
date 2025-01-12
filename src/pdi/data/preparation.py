@@ -247,6 +247,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
         Args:
             complete_only (bool, optional): Whether to return only the group with complete examples. Defaults to False.
         """
+        self.undersample = undersample
         super().__init__(complete_only)
         self.save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
 
@@ -275,7 +276,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
         print(f"Group count: {len(groups)}")
 
         # undersampling
-        if UNDERSAMPLE:
+        if self.undersample:
             for key in groups.keys():
                 to_drop = len(groups[key].index) - smallest_group_size
                 if to_drop > 0:
