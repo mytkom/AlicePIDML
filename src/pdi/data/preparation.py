@@ -249,7 +249,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
         """
         self.undersample = undersample
         super().__init__(complete_only)
-        self.save_dir: str = f"{PROCESSED_DIR}/feature_set/run{RUN}"
+        self.save_dir: str = f"{base_dir}/feature_set/run{RUN}"
 
     def _group_data(self, data):
         cols = list(COLUMN_DETECTOR.keys())
@@ -271,14 +271,13 @@ class FeatureSetPreparation(GroupedDataPreparation):
                 key = columns_to_detectors_masked(not_missing)
                 groups[key] = group
                 group_size = len(group.index)
-                if group_size < smallest_group_size:
-                    smallest_group_size = group_size
+                smallest_group_size = min(smallest_group_size, group_size)
         print(f"Group count: {len(groups)}")
 
         # undersampling
         if self.undersample:
-            for key in groups.keys():
-                to_drop = len(groups[key].index) - smallest_group_size
+            for key, group in groups.items():
+                to_drop = len(group.index) - smallest_group_size
                 if to_drop > 0:
                     # TODO: set configurable seed for sampling to get repeatable results
                     groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
@@ -316,4 +315,3 @@ class FeatureSetPreparation(GroupedDataPreparation):
                 )
             )
 
-        return

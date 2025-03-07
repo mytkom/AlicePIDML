@@ -503,7 +503,7 @@ class GroupedDataPreparation(DataPreparation):
         self,
         batch_size: int,
         num_workers: int,
-        splits: list[Split] = list(Split),
+        splits: list[Split] = None,
         groupId: GroupID = None
     ) -> tuple[Iterable[DatasetItem], ...]:
         if splits is None:
