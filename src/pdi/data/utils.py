@@ -171,6 +171,7 @@ class DataPreparation:
         self._input_target, self._additional = self._do_process_data(split_data_2)
 
     def _load_input_data(self, input_path: str = INPUT_PATH):
+        self.csv_name: str = os.path.splitext(os.path.basename(input_path))[0]
         return pd.read_csv(input_path, sep=CSV_DELIMITER, index_col=0)
 
     def _delete_unique_targets(self, data):
@@ -316,6 +317,10 @@ class DataPreparation:
                 )
             )
 
+        with open(f"{self.save_dir}/csv_name.txt", "w", encoding="utf-8") as file:
+            file.write(self.csv_name)
+
+
     def _load_preprocessed_data(self, splits):
         for split in splits:
             with gzip.open(
@@ -326,6 +331,8 @@ class DataPreparation:
                 f"{self.save_dir}/additional_{split.name}.pkl", "rb"
             ) as file:
                 self._additional[split] = pickle.load(file)
+        with open(f"{self.save_dir}/csv_name.txt", "r", encoding="utf-8") as file:
+            self.csv_name = file.read().strip()
 
     def _try_load_preprocessed_data(self, splits):
         if any(
@@ -470,6 +477,9 @@ class GroupedDataPreparation(DataPreparation):
             index=False,
             orient="split",
         )
+                    
+        with open(f"{self.save_dir}/csv_name.txt", "w", encoding="utf-8") as file:
+            file.write(self.csv_name)
 
     def _load_preprocessed_data(self, splits):
         for split in splits:
@@ -488,6 +498,9 @@ class GroupedDataPreparation(DataPreparation):
                 for gid, group_data in data.items():
                     self.grouped_add.setdefault(gid, {})
                     self.grouped_add[gid][split] = group_data
+            
+        with open(f"{self.save_dir}/csv_name.txt", "r", encoding="utf-8") as file:
+            self.csv_name = file.read().strip()
 
     def _try_load_preprocessed_data(self, splits):
         are_splits_loaded = [

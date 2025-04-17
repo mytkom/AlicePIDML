@@ -50,8 +50,8 @@ class DeletePreparation(DataPreparation):
         Raises:
             Exception: raised if complete_only=False.
         """
-        self.save_dir = f"{base_dir}/deleted/run{RUN}"
         super().__init__()
+        self.save_dir = f"{base_dir}/deleted/run{RUN}"
         if not complete_only:
             raise ValueError("DeletePreparation can only prepare complete cases.")
 
