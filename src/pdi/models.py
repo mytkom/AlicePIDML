@@ -16,6 +16,7 @@ import torch
 from torch import nn
 from torch import Tensor
 from torch.nn.functional import one_hot
+from torch.autograd import Function
 
 from pdi.data.constants import N_COLUMNS
 from pdi.data.types import GroupID
@@ -181,6 +182,57 @@ class AttentionModel(nn.Module):
     def predict(self, incomplete_tensor: Tensor) -> Tensor:
         return self.forward(incomplete_tensor)
 
+# DANN
+class ReverseLayerF(Function):
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        output = grad_output.neg() * ctx.alpha
+
+        return output, None
+    
+class AttentionModelDANN(AttentionModel):
+    """AttentionModelDANN is an attention-based model with Domain Adversarial Neural Network (DANN) capabilities."""
+
+    def __init__(
+        self,
+        in_dim: int,
+        embed_hidden: int,
+        embed_dim: int,
+        ff_hidden: int,
+        pool_hidden: int,
+        num_heads: int,
+        num_blocks: int,
+        activation: nn.Module = nn.ReLU,
+        dropout: float = 0.4,
+    ):
+        super().__init__(
+            in_dim, embed_hidden, embed_dim, ff_hidden, pool_hidden, num_heads, num_blocks, activation, dropout
+        )
+        # TODO: should I use different architecture for the domain classifier? I should do sweeps to find out.
+        self.domain_classifier = NeuralNet([embed_dim, pool_hidden, 1], activation)
+    
+    def forward(self, x: Tensor, alpha: float = 1.0) -> Tensor:
+        # Feature extraction part
+        feature = self.to_feature_set(x)
+        feature = self.emb(feature)
+        feature = self.drop(feature)
+        feature = self.encoder(feature)
+        feature = self.pool(feature)
+
+        # Domain adversarial part
+        reverse_x = ReverseLayerF.apply(feature, alpha)
+        domain_posterior = self.domain_classifier(reverse_x)
+
+        # Classifier part
+        class_posterior = self.net(feature)
+
+        return class_posterior, domain_posterior
 
 class Traditional:
     pass

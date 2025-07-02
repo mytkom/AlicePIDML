@@ -314,4 +314,3 @@ class FeatureSetPreparation(GroupedDataPreparation):
                     {"columns_for_training": self._columns_for_training.tolist()}
                 )
             )
-

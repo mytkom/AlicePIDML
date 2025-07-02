@@ -56,7 +56,6 @@ DROP_COLUMNS_BIG = [
     *["fTOFExpSignalDiff" + val for val in PART_DICT.values()],
     "fTrackEtaEMCAL",
     "fTrackPhiEMCAL",
-    "fCentRun2V0M",
     "fMultFV0A",
     "fMultFV0C",
     "fMultFV0M",
@@ -69,7 +68,7 @@ DROP_COLUMNS_BIG = [
     "fMultTPC",
 ]
 DROP_COLUMNS_SMALL = ["fPdgCode", "fIsPhysicalPrimary"]
-N_COLUMNS_BIG = 64
+N_COLUMNS_BIG = 63
 N_COLUMNS_SMALL = 21
 N_COLUMNS_ML = 19
 N_COLUMNS_NSIGMAS = 29

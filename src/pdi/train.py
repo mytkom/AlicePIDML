@@ -5,7 +5,45 @@ import wandb
 
 from pdi.data.constants import GROUP_ID_KEY
 from pdi.evaluate import validate_model
-from pdi.models import NeuralNetEnsemble
+from pdi.models import NeuralNetEnsemble, AttentionModelDANN
+
+def train_one_epoch_dann(model, target_code, source_train_loader, target_train_loader, device, optimizer, loss_fun_class, loss_fun_domain):
+    model.train()
+    LOG_EVERY = 50
+    loss_run_sum = 0
+    final_loss = 0.0
+    count = 0
+    loader_len = min(len(source_train_loader), len(target_train_loader))
+
+    for i in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
+        source_input_data, source_targets, _ = next(iter(source_train_loader))
+        target_input_data = next(iter(target_train_loader))
+
+        source_input_data = source_input_data.to(device)
+        target_input_data = target_input_data.to(device)
+
+        source_binary_targets = (source_targets == target_code).type(torch.float).to(device)
+        optimizer.zero_grad()
+
+        out_source_class, out_source_domain = model(source_input_data)
+        _, out_target_domain = model(target_input_data)
+
+        loss_source_class = loss_fun_class(out_source_class, source_binary_targets)
+        loss_source_domain = loss_fun_domain(out_source_domain, torch.zeros_like(out_source_domain))
+        loss_target_domain = loss_fun_domain(out_target_domain, torch.ones_like(out_target_domain))
+
+        loss = loss_source_class + loss_source_domain + loss_target_domain
+        loss.backward()
+        optimizer.step()
+
+        loss_run_sum += loss.item()
+        if i % LOG_EVERY == 0:
+            wandb.log({"loss": loss_run_sum})
+            loss_run_sum = 0
+
+        final_loss += loss.item()
+        count += 1
+    return final_loss / count
 
 
 def train_one_epoch(model, target_code, train_loader, device, optimizer, loss_fun):
@@ -39,7 +77,7 @@ def train_one_epoch(model, target_code, train_loader, device, optimizer, loss_fu
     return final_loss / count
 
 
-def train(model, target_code, device, train_loader, val_loader, pos_weight):
+def train(model, target_code, device, dataloaders, pos_weight):
     optimizer = torch.optim.Adam(model.parameters(), lr=wandb.config.start_lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, wandb.config.gamma)
 
@@ -53,9 +91,19 @@ def train(model, target_code, device, train_loader, val_loader, pos_weight):
     loss_arr = []
     val_loss_arr = []
     for epoch in range(wandb.config.max_epochs):
-        loss = train_one_epoch(
-            model, target_code, train_loader, device, optimizer, loss_fun
-        )
+        if isinstance(model, AttentionModelDANN):
+            source_train_loader, val_loader = dataloaders["source"]
+            target_train_loader = dataloaders["target"]
+            loss_fun_domain = nn.BCEWithLogitsLoss()
+            loss = train_one_epoch_dann(
+                model, target_code, source_train_loader, target_train_loader, device, optimizer, loss_fun_class=loss_fun, loss_fun_domain=loss_fun_domain
+            )
+        else:
+            train_loader, val_loader = dataloaders
+            loss = train_one_epoch(
+                model, target_code, train_loader, device, optimizer, loss_fun
+            )
+
         val_loss, val_f1, val_prec, val_rec, val_thres = validate_model(
             model, target_code, val_loader, device, loss_fun
         )

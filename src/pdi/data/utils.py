@@ -16,7 +16,8 @@ import gzip
 import json
 import os
 import pickle
-from itertools import chain
+import sys
+from itertools import chain, combinations
 from random import Random
 import typing
 from typing import Generic, Iterable, Iterator, TypeVar, Optional
@@ -27,6 +28,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+from pdi.data.detector_helpers import columns_to_detectors_masked
 
 from pdi.data.constants import (
     CSV_DELIMITER,
@@ -47,8 +49,8 @@ from pdi.data.constants import (
     COLUMNS_DROPPED_FOR_TESTS,
     TPC_CUT,
 )
-from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split
-from pdi.data.config import INPUT_PATH, RUN
+from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split, COLUMN_DETECTOR
+from pdi.data.config import INPUT_PATH, RUN, EXPERIMENTAL_INPUT_PATH, UNDERSAMPLE
 
 T = TypeVar("T")
 
@@ -70,6 +72,7 @@ class CombinedDataLoader(Generic[T]):
     def _reset_seed(self):
         self.rng = Random(SEED)
 
+    # TODO: move undersampling here, it will be easier to implement
     def __iter__(self) -> Iterator[T]:
         if not self.shuffle:
             self._reset_seed()
@@ -87,6 +90,7 @@ class CombinedDataLoader(Generic[T]):
         return sum(len(d) for d in self.dataloaders)
 
 
+# Simulated data related
 class DictDataset(Dataset[DatasetItem]):
     """DictDataset is a mapping dataset containing items that consist of an input tensor, a target tensor, and a dict of additional tensors.
 
@@ -120,7 +124,6 @@ class DictDataset(Dataset[DatasetItem]):
             self.target_tensors[index],
             {key: val[index] for key, val in self.dict_tensors.items()},
         )
-
 
 class DataPreparation:
     """Base class for preparation techniques without grouping.
@@ -632,3 +635,299 @@ class GroupedDataPreparation(DataPreparation):
             groups[gid] = data
 
         return groups
+
+# Experimental data/DANN related
+class ExperimentDataset(Dataset[Tensor]):
+    """ExperimentDataset is a mapping dataset containing items that consist of an input tensor.
+
+    Base Class:
+        Dataset
+    """
+
+    def __init__(
+        self,
+        input_tensors: Tensor
+    ):
+        self.input_tensors = input_tensors
+
+    def __len__(self) -> int:
+        return self.input_tensors.shape[0]
+
+    def __getitem__(self, index: int) -> Tensor:
+        return self.input_tensors[index]
+
+
+class ExperimentFeatureSetDataPreparation:
+    """Class for preparation techniques with grouping for experimental data. Needed for DANN AttentionModel.
+
+    Methods:
+        prepare_data: load and preprocess the data.
+        save_data: save preprocessed data.
+        prepare_dataloaders: create dataloaders from preprocessed data.
+    """
+
+    COMPLETE_GROUP_ID = GroupID(columns_to_detectors_masked(COLUMN_DETECTOR.keys()))
+
+    def __init__(self, base_dir = PROCESSED_DIR, complete_only = False, undersample = UNDERSAMPLE) -> None:
+        self.undersample = undersample
+        self._scaling_params = pd.DataFrame(columns=["column", "mean", "std"])
+        self._columns_for_training = None
+        self.save_dir = f"{base_dir}/experiment/run{RUN}"
+        self.complete_only = complete_only
+        self.grouped_it = {}        
+
+    def prepare_data(self, input_path: str = EXPERIMENTAL_INPUT_PATH) -> None:
+        """prepare_data loads and preprocesses data.
+        Data is loaded from the path provided in `pdi.data.constants`
+        """
+        data = self._load_input_data(input_path)
+        data = data.loc[data["fTPCSignal"] < TPC_CUT, :]
+        data = self._make_missing_null(data)
+        data = self._normalize_data(data)
+        group_dict = self._group_data(data)
+        for gid, group_data in group_dict.items():
+            group_data = self._remove_unnecessary_columns(group_data)
+            self.grouped_it[gid] = self._do_process_data(group_data)
+
+    def _load_input_data(self, input_path: str = INPUT_PATH):
+        self.csv_name: str = os.path.splitext(os.path.basename(input_path))[0]
+        return pd.read_csv(input_path, sep=CSV_DELIMITER, index_col=0)
+
+    def _make_missing_null(self, data):
+        for column, val in MISSING_VALUES.items():
+            data.loc[data[column] == val, column] = np.NaN
+
+        if RUN == 2:
+            print("Run 2 format")
+
+        if RUN == 3:
+            data.loc[data["fTRDPattern"].isnull(), ["fTRDSignal", "fTRDPattern"]] = np.NaN
+            data.loc[data["fBeta"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
+            print("Run 3 format")
+        return data
+
+    def _normalize_data(self, data):
+        for column in data.columns:
+            if column in DO_NOT_SCALE or column in NSIGMA_COLUMNS:
+                continue
+            mean = np.mean(data[column])
+            std = np.std(data[column])
+            if std == 0:
+                mean = 0
+                std = 1
+            self._scaling_params = pd.concat(
+                [
+                    self._scaling_params,
+                    pd.DataFrame(
+                        {
+                            "column": column,
+                            "mean": mean,
+                            "std": std,
+                        },
+                        index=[0],
+                    ),
+                ],
+                ignore_index=True,
+            )
+            data[column] = (data[column] - mean) / std
+        return data
+
+    def _remove_unnecessary_columns(self, data):
+        if len(data.columns) == N_COLUMNS_BIG:
+            input_data = data.drop(columns=DROP_COLUMNS_BIG)
+        elif len(data.columns) == N_COLUMNS_SMALL:
+            input_data = data.drop(columns=DROP_COLUMNS_SMALL)
+        else:
+            raise ValueError(
+                "The input table has invalid number of columns. Was the PID ML producer updated?"
+            )
+
+        return input_data
+
+    def _do_process_data(self, data):
+        if len(data.columns) == N_COLUMNS_NSIGMAS:
+            data.drop(columns=NSIGMA_COLUMNS, inplace=True)
+
+        data.drop(columns=COLUMNS_DROPPED_FOR_TESTS, inplace=True)
+
+        columns_for_training = pd.Series(data.columns.tolist())
+        columns_for_training = columns_for_training[~columns_for_training.isin(NSIGMA_COLUMNS)]
+        self._columns_for_training = columns_for_training
+
+        return data
+
+    def save_data(self) -> None:
+        os.makedirs(self.save_dir, exist_ok=True)
+
+        with gzip.open(
+            f"{self.save_dir}/input_data.pkl", "wb"
+        ) as file:
+            pickle.dump(self.grouped_it, file)
+
+        self._scaling_params.to_json(
+            f"{self.save_dir}/scaling_params.json",
+            index=False,
+            orient="split",
+        )
+
+        with open(f"{self.save_dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
+            f.write(
+                json.dumps(
+                    {"columns_for_training": self._columns_for_training.tolist()}
+                )
+            )
+
+        with open(f"{self.save_dir}/csv_name.txt", "w", encoding="utf-8") as file:
+            file.write(self.csv_name)
+
+    
+    def _load_preprocessed_data(self):
+        with gzip.open(
+            f"{self.save_dir}/input_data.pkl", "rb"
+        ) as file:
+            self.grouped_it = pickle.load(file)
+        with open(f"{self.save_dir}/csv_name.txt", "r", encoding="utf-8") as file:
+            self.csv_name = file.read().strip()
+
+    def _try_load_preprocessed_data(self):
+        if not self.grouped_it:
+            self._load_preprocessed_data()
+
+    def prepare_dataloaders(
+        self, batch_size: int, num_workers: int, _
+    ) -> Iterable[DatasetItem]:
+        """prepare_dataloaders creates dataloaders from preprocessed data.
+
+        Args:
+            batch_size (int): batch size
+            num_workers (int): number of worker processed used in loading data.
+                See `torch.utils.data.DataLoader` for more info.
+
+        Returns:
+            Iterable[DatasetItem] dataloader with preprocessed data.
+        """
+        self._try_load_preprocessed_data()
+
+        dataloaders = {
+            gid: DataLoader(
+                ExperimentDataset(torch.tensor(self.grouped_it[gid].values, dtype=torch.float32)),
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=num_workers,
+            )
+            for gid in self.grouped_it.keys()
+        }
+
+        return CombinedDataLoader(
+            True,
+            *dataloaders.values()
+        )
+
+    def load_columns(self) -> list[str]:
+        cols_for_training_path = self.save_dir
+
+        with open(os.path.join(cols_for_training_path, "columns_for_training.json"), encoding="UTF-8") as f:
+            data = json.load(f)
+
+        cols = data["columns_for_training"]
+        return cols
+    
+    def get_group_ids(self) -> list[GroupID]:
+        """get_group_ids returns the ids of groups in the dataset
+
+        Returns:
+            list[GroupID]: list of group ids
+        """
+        self._try_load_preprocessed_data()
+        return list(self.grouped_it.keys())
+
+    def _group_data(self, data):
+        cols = list(COLUMN_DETECTOR.keys())
+
+        col_combinations = []
+        for i in range(len(cols) + 1):
+            els = [list(x) for x in combinations(cols, i)]
+            col_combinations.extend(els)
+
+        print(f"Data shape: {data.shape}")
+        groups = {}
+        smallest_group_size = sys.maxsize * 2 + 1
+        for missing in col_combinations:
+            not_missing = list(filter(lambda i: i not in missing, cols)) # pylint: disable=cell-var-from-loop
+            group = data[
+                data[not_missing].notnull().all(1) & data[missing].isnull().all(1)
+            ]
+            if len(group.index) > 0:
+                key = columns_to_detectors_masked(not_missing)
+                groups[key] = group
+                group_size = len(group.index)
+                smallest_group_size = min(smallest_group_size, group_size)
+        print(f"Group count: {len(groups)}")
+
+        # undersampling
+        if self.undersample:
+            for key, group in groups.items():
+                to_drop = len(group.index) - smallest_group_size
+                if to_drop > 0:
+                    # TODO: set configurable seed for sampling to get repeatable results
+                    groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
+                    groups[key].drop(groups[key].tail(to_drop).index, inplace=True)
+
+        return groups
+
+
+
+class DANNGroupedDataPreparationWrapper:
+    """Base data preparation class for DANN classifier with grouping
+    
+    Methods are the same as in GroupedDataPreparation, but in the constuctor two other grouped preparation classes are passed.
+    Their methods are sequentially called to prepare the data.
+    """
+    def __init__(self, source: GroupedDataPreparation, target: ExperimentFeatureSetDataPreparation):
+        self.source = source
+        self.target = target
+    
+    def pos_weight(self, target: int) -> float:
+        """pos_weight returns the ratio between the negative and positive samples in the train split, in all groups."""
+        return self.source.pos_weight(target)
+    
+    def prepare_data(self, source_input_path: str = INPUT_PATH, target_input_path: str = EXPERIMENTAL_INPUT_PATH) -> None:
+        """prepare_data loads and preprocesses data.
+        Data is loaded from the path provided in `pdi.data.constants`
+        """
+        self.source.prepare_data(source_input_path)
+        self.target.prepare_data(target_input_path)
+
+    def save_data(self) -> None:
+        """save_data saves preprocessed data, as well as scaling parameters, to disk.
+        Save location is given in the class variable `save_dir`
+        """
+        self.source.save_data()
+        self.target.save_data()
+    
+    def prepare_dataloaders(
+        self,
+        batch_size: int,
+        num_workers: int,
+        splits: Optional[list[Split]] = None,
+        groupId: GroupID = None
+    ):
+        """prepare separate dataloaders and return them in a dictionary with keys 'source' and 'target'."""
+        if splits is None:
+            splits = list(Split)
+
+        source_dataloaders = self.source.prepare_dataloaders(batch_size, num_workers, splits, groupId)
+        target_dataloaders = self.target.prepare_dataloaders(batch_size, num_workers, splits)
+
+        return {
+            "source": source_dataloaders,
+            "target": target_dataloaders,
+        }
+    
+    def get_group_ids(self) -> list[GroupID]:
+        """get_group_ids returns the ids of groups in the dataset
+
+        Returns:
+            list[GroupID]: list of group ids
+        """
+        return self.source.get_group_ids()  
