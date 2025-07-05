@@ -37,6 +37,7 @@ from pdi.data.constants import (
     N_COLUMNS_BIG,
     N_COLUMNS_SMALL,
     N_COLUMNS_NSIGMAS,
+    N_COLUMNS_ML,
     NSIGMA_COLUMNS,
     GROUP_ID_KEY,
     MISSING_VALUES,
@@ -733,19 +734,17 @@ class ExperimentFeatureSetDataPreparation:
         return data
 
     def _remove_unnecessary_columns(self, data):
-        if len(data.columns) == N_COLUMNS_BIG:
-            input_data = data.drop(columns=DROP_COLUMNS_BIG)
-        elif len(data.columns) == N_COLUMNS_SMALL:
-            input_data = data.drop(columns=DROP_COLUMNS_SMALL)
-        else:
+        if len(data.columns) == N_COLUMNS_BIG - 2:  # -2 because of TARGET_COLUMN and IsPhysicalPrimary
+            data.drop(columns=DROP_COLUMNS_BIG, inplace=True)
+        elif len(data.columns) != N_COLUMNS_ML:
             raise ValueError(
                 "The input table has invalid number of columns. Was the PID ML producer updated?"
             )
 
-        return input_data
+        return data
 
     def _do_process_data(self, data):
-        if len(data.columns) == N_COLUMNS_NSIGMAS:
+        if len(data.columns) == N_COLUMNS_NSIGMAS - 2:  # -2 because of TARGET_COLUMN and IsPhysicalPrimary
             data.drop(columns=NSIGMA_COLUMNS, inplace=True)
 
         data.drop(columns=COLUMNS_DROPPED_FOR_TESTS, inplace=True)
