@@ -330,6 +330,8 @@ def plot_feature_combinations(
     title_template: str = "Scatter Plot of {feature1} vs {feature2}",
     size: float = 0.8,
     alpha: float = 0.5,
+    log_scale_y: bool = False,
+    log_scale_x: bool = False,
 ) -> Iterator[Tuple[Figure, str]]:
     """
     Generator that yields scatter plots of combinations of features.
@@ -355,16 +357,30 @@ def plot_feature_combinations(
     def create_scatter_plot(feature1, feature2):
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.set_title(title_template.format(feature1=feature1, feature2=feature2), fontsize=14)
-        ax.scatter(data[feature1], data[feature2], c=condition, alpha=alpha, s=size)
+        
+        # Map condition to colors (e.g., 0 -> blue, 1 -> red)
+        colors = np.where(condition, 'red', 'blue')
+        ax.scatter(data[feature1], data[feature2], c=colors, alpha=alpha, s=size)
+        
+        # Set x-axis limits to include 95% of the data points
+        x_min, x_max = np.percentile(data[feature1].dropna(), [0.0, 95.0])
+        ax.set_xlim(x_min, x_max)
+        
+        if log_scale_y:
+            ax.set_yscale('log')
+        if log_scale_x:
+            ax.set_xscale('log')
         ax.set_xlabel(feature1)
         ax.set_ylabel(feature2)
         ax.tick_params(labelsize=10)
+        
         if condition_legend != ("", ""):
             legend_elements = [
                 Line2D([0], [0], marker='o', color='w', label=condition_legend[0], markerfacecolor='blue', markersize=8),
                 Line2D([0], [0], marker='o', color='w', label=condition_legend[1], markerfacecolor='red', markersize=8)
             ]
             ax.legend(handles=legend_elements)
+        
         fig.tight_layout()
         return fig
 

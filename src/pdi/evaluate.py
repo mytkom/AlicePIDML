@@ -38,17 +38,18 @@ def get_nsigma_predictions_data(
         target_code (int, optional)
 
     Returns:
-        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]]]:
-            array of predictions, array of targets, dictionary of additional data for analysis
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]], NDArray[np.float64]]:
+            array of predictions, array of targets, dictionary of additional data for analysis, array of input data
     """
     predictions = []
     targets = []
     additional_data = {}
+    input_data_tensors = []
 
     nsigma_tpc_col = "fTPCNSigma" + PART_DICT[abs(target_code)]
     nsigma_tof_col = "fTOFNSigma" + PART_DICT[abs(target_code)]
 
-    for _, target, data_dict in tqdm(dataloader):
+    for input_data, target, data_dict in tqdm(dataloader):
         tpc = abs(data_dict[nsigma_tpc_col])
         nsigmas = (
             np.sqrt(
@@ -61,6 +62,7 @@ def get_nsigma_predictions_data(
 
         predictions.extend(nsigmas.cpu().detach().numpy())
         targets.extend(target.numpy())
+        input_data_tensors.extend(input_data.cpu().numpy())
         for k, v in data_dict.items():
             if k not in additional_data:
                 additional_data[k] = []
@@ -70,7 +72,7 @@ def get_nsigma_predictions_data(
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
     dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
 
-    return predictions_arr, targets_arr, dict_arr
+    return predictions_arr, targets_arr, dict_arr, np.array(input_data_tensors).squeeze()
 
 
 def get_predictions_data_and_loss(
@@ -90,12 +92,13 @@ def get_predictions_data_and_loss(
         target_code (int, optional). Defaults to None.
 
     Returns:
-        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float]:
-            array of predictions, array of targets, dictionary of additional data for analysis, loss value
+        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float, list[NDArray[np.float64]]]:
+            array of predictions, array of targets, dictionary of additional data for analysis, loss value, input data
     """
     predictions = []
     targets = []
     additional_data = {}
+    input_data_tensors = []
     val_loss = 0.0
     count = 0
 
@@ -120,6 +123,7 @@ def get_predictions_data_and_loss(
             predict_target = torch.sigmoid(out)
             predictions.extend(predict_target.cpu().detach().numpy())
             targets.extend(target.cpu().numpy())
+            input_data_tensors.extend(input_data.cpu().numpy())
             for k, v in data_dict.items():
                 if k not in additional_data:
                     additional_data[k] = []
@@ -132,7 +136,7 @@ def get_predictions_data_and_loss(
     if count == 0:
         count = 1
 
-    return predictions_arr, targets_arr, dict_arr, val_loss / count
+    return predictions_arr, targets_arr, dict_arr, val_loss / count, np.array(input_data_tensors).squeeze()
 
 
 def validate_model(
@@ -155,7 +159,7 @@ def validate_model(
         tuple[float, ...]: validation loss, f1 score, precision, recall, and threshold for selecting the positive class
     """
 
-    predictions, targets, _, val_loss = get_predictions_data_and_loss(
+    predictions, targets, _, val_loss, _ = get_predictions_data_and_loss(
         model, validation_loader, device, loss_fun, target_code
     )
     binary_targets = targets == target_code
