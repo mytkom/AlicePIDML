@@ -247,8 +247,7 @@ class FeatureSetPreparation(GroupedDataPreparation):
         Args:
             complete_only (bool, optional): Whether to return only the group with complete examples. Defaults to False.
         """
-        self.undersample = undersample
-        super().__init__(complete_only)
+        super().__init__(complete_only, undersample=undersample)
         self.save_dir: str = f"{base_dir}/feature_set/run{RUN}"
 
     def _group_data(self, data):
@@ -273,15 +272,6 @@ class FeatureSetPreparation(GroupedDataPreparation):
                 group_size = len(group.index)
                 smallest_group_size = min(smallest_group_size, group_size)
         print(f"Group count: {len(groups)}")
-
-        # undersampling
-        if self.undersample:
-            for key, group in groups.items():
-                to_drop = len(group.index) - smallest_group_size
-                if to_drop > 0:
-                    # TODO: set configurable seed for sampling to get repeatable results
-                    groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
-                    groups[key].drop(groups[key].tail(to_drop).index, inplace=True)
 
         return groups
 

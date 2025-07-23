@@ -22,9 +22,9 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from pdi.data.constants import PART_DICT, P_CUT, GROUP_ID_KEY
-from pdi.models import NeuralNetEnsemble, AttentionModelDANN
+from pdi.data.constants import PART_DICT
 
+P_CUT=0.5
 
 def get_nsigma_predictions_data(
     dataloader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
@@ -74,104 +74,7 @@ def get_nsigma_predictions_data(
 
     return predictions_arr, targets_arr, dict_arr, np.array(input_data_tensors).squeeze()
 
-
-def get_predictions_data_and_loss(
-    model: torch.nn.Module,
-    dataloader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
-    device: torch.device,
-    loss_fun: Callable[[Tensor, Tensor], Tensor] = None,
-    target_code: int = None,
-) -> tuple[NDArray[np.float32], NDArray[np.float32], float]:
-    """get_predictions_loss_and_data returns all information in a dataloader in combined numpy arrays.
-
-    Args:
-        model (torch.nn.Module):
-        dataloader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]]):
-        device (torch.device):
-        loss_fun (Callable[[Tensor, Tensor], Tensor], optional). Defaults to None.
-        target_code (int, optional). Defaults to None.
-
-    Returns:
-        tuple[NDArray[np.float32], NDArray[np.float32], Dict[Additional, NDArray[np.float32]],  float, list[NDArray[np.float64]]]:
-            array of predictions, array of targets, dictionary of additional data for analysis, loss value, input data
-    """
-    predictions = []
-    targets = []
-    additional_data = {}
-    input_data_tensors = []
-    val_loss = 0.0
-    count = 0
-
-    model.eval()
-    for _ in range(1):
-        # with torch.no_grad():
-        for input_data, target, data_dict in tqdm(dataloader):
-            # prediction
-            input_data = input_data.to(device)
-            group_id = data_dict.get(GROUP_ID_KEY)
-            # TODO: move NNEnsemble group choice inside model
-            if isinstance(model, NeuralNetEnsemble):
-                out = model(input_data, group_id)
-            elif isinstance(model, AttentionModelDANN):
-                out, _ = model(input_data)
-            else:
-                out = model(input_data)
-            # loss
-            if loss_fun and target_code:
-                binary_target = (target == target_code).type(torch.float).to(device)
-                val_loss += loss_fun(out, binary_target).item()
-                count += 1
-            # save data
-            predict_target = torch.sigmoid(out)
-            predictions.extend(predict_target.cpu().detach().numpy())
-            targets.extend(target.cpu().numpy())
-            input_data_tensors.extend(input_data.cpu().numpy())
-            for k, v in data_dict.items():
-                if k not in additional_data:
-                    additional_data[k] = []
-                additional_data[k].extend(v.numpy())
-
-    predictions_arr = np.array(predictions).squeeze()
-    targets_arr = np.array(targets, dtype=np.float32).squeeze()
-    dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
-
-    if count == 0:
-        count = 1
-
-    return predictions_arr, targets_arr, dict_arr, val_loss / count, np.array(input_data_tensors).squeeze()
-
-
-def validate_model(
-    model: torch.nn.Module,
-    target_code: int,
-    validation_loader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
-    device: torch.device,
-    loss_fun: Callable[[Tensor, Tensor], Tensor],
-) -> tuple[float, ...]:
-    """validate_model calculates loss and prediction metrics of the model on the validation set.
-
-    Args:
-        model (torch.nn.Module)
-        target_code (int)
-        validation_loader (DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]])
-        device (torch.device)
-        loss_fun (Callable[[Tensor, Tensor], Tensor])
-
-    Returns:
-        tuple[float, ...]: validation loss, f1 score, precision, recall, and threshold for selecting the positive class
-    """
-
-    predictions, targets, _, val_loss, _ = get_predictions_data_and_loss(
-        model, validation_loader, device, loss_fun, target_code
-    )
-    binary_targets = targets == target_code
-
-    val_f1, val_prec, val_rec, var_thres = _maximize_f1(binary_targets, predictions)
-
-    return val_loss, val_f1, val_prec, val_rec, var_thres
-
-
-def _maximize_f1(
+def maximize_f1(
     binary_targets: NDArray[np.float32], predictions: NDArray[np.float32]
 ) -> tuple[float, ...]:
     precision, recall, thresholds = precision_recall_curve(binary_targets, predictions)

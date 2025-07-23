@@ -1,0 +1,91 @@
+{
+    "training": {
+        "optimizers": {
+            "adamw": {
+                "weight_decay": 0.0
+            },
+            "sgd": {
+                "momentum": 0.9,
+                "weight_decay": 0.0,
+                "nesterov": true
+            }
+        },
+        "optimizer": "AdamW",
+        "lr_schedulers": {
+            "exponential": {
+                "gamma": 0.9
+            }
+        },
+        "lr_scheduler": "Exponential",
+        "device": "cuda",
+        "loss": "cross entropy",
+        "steps_to_log": 50,
+        "batch_size": 32,
+        "max_epochs": 50,
+        "early_stopping_epoch_count": 5,
+        "early_stopping_progress_threshold": 0.001,
+        "num_workers": 4,
+        "start_lr": 0.003
+    },
+    "data": {
+        "outlier_filtering_methods": {
+            "ocsvm": {},
+            "isolation_forest": {},
+            "iqr": {}
+        },
+        "outlier_filtering_method": null,
+        "sim_dataset_paths": [],
+        "exp_dataset_paths": [],
+        "train_size": 0.55,
+        "test_size": 0.2,
+        "undersample_missing_detectors": true,
+        "weight_particles_species": false,
+        "is_run_3": true,
+        "complete_only": false,
+        "split_seed": 0
+    },
+    "model": {
+        "architecture": "Attention",
+        "mlp": {
+            "layers": [],
+            "missing_data_strategy": "mean",
+            "activation": "ReLU",
+            "dropout": 0.9
+        },
+        "ensemble": {
+            "group_ids": [],
+            "hidden_layers": [],
+            "activation": "ReLU",
+            "dropout": 0.9
+        },
+        "attention": {
+            "embed_hidden": 128,
+            "embed_dim": 32,
+            "ff_hidden": 128,
+            "pool_hidden": 64,
+            "num_heads": 2,
+            "num_blocks": 2,
+            "activation": "ReLU",
+            "dropout": 0.4
+        },
+        "attention_dann": {
+            "dom_layers": [],
+            "attention": {
+                "embed_hidden": 128,
+                "embed_dim": 32,
+                "ff_hidden": 128,
+                "pool_hidden": 64,
+                "num_heads": 2,
+                "num_blocks": 2,
+                "activation": "ReLU",
+                "dropout": 0.4
+            },
+            "alpha": 2.0
+        }
+    },
+    "project_dir": "project",
+    "log_dir": "logs",
+    "mixed_precision": "no",
+    "seed": 0,
+    "config": "test_config.json"
+}

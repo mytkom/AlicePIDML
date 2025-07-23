@@ -27,7 +27,7 @@ import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
 from pdi.data.detector_helpers import columns_to_detectors_masked
 
 from pdi.data.constants import (
@@ -51,80 +51,9 @@ from pdi.data.constants import (
     TPC_CUT,
 )
 from pdi.data.types import Additional, DatasetItem, GroupID, InputTarget, Split, COLUMN_DETECTOR
-from pdi.data.config import INPUT_PATH, RUN, EXPERIMENTAL_INPUT_PATH, UNDERSAMPLE
 
 T = TypeVar("T")
 
-
-class CombinedDataLoader(Generic[T]):
-    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches."""
-
-    def __init__(self, shuffle: bool, *dataloaders: DataLoader[T]):
-        """__init__
-
-        Args:
-            shuffle (bool): whether to change item order with each iteration.
-            *dataloaders (DataLoader): a list of dataloaders to combine.
-        """
-        self.shuffle = shuffle
-        self.dataloaders = dataloaders
-        self.rng = Random(SEED)
-
-    def _reset_seed(self):
-        self.rng = Random(SEED)
-
-    # TODO: move undersampling here, it will be easier to implement
-    def __iter__(self) -> Iterator[T]:
-        if not self.shuffle:
-            self._reset_seed()
-
-        iters = [iter(d) for d in self.dataloaders]
-
-        while iters:
-            it = self.rng.choice(iters)
-            try:
-                yield next(it)
-            except StopIteration:
-                iters.remove(it)
-
-    def __len__(self) -> int:
-        return sum(len(d) for d in self.dataloaders)
-
-
-# Simulated data related
-class DictDataset(Dataset[DatasetItem]):
-    """DictDataset is a mapping dataset containing items that consist of an input tensor, a target tensor, and a dict of additional tensors.
-
-    Base Class:
-        Dataset
-    """
-
-    def __init__(
-        self,
-        input_tensors: Tensor,
-        target_tensors: Tensor,
-        **additional_tensors: Tensor,
-    ):
-        """__init__
-
-        Args:
-            input_tensors (Tensor): tensor containing all inputtensors
-            target_tensors (Tensor): tensor containing all target tensors
-            **additional_tensors (Tensor): dict of tensors containing additional information
-        """
-        self.input_tensors = input_tensors
-        self.target_tensors = target_tensors
-        self.dict_tensors = additional_tensors
-
-    def __len__(self) -> int:
-        return self.target_tensors.shape[0]
-
-    def __getitem__(self, index: int) -> DatasetItem:
-        return (
-            self.input_tensors[index],
-            self.target_tensors[index],
-            {key: val[index] for key, val in self.dict_tensors.items()},
-        )
 
 class DataPreparation:
     """Base class for preparation techniques without grouping.
@@ -415,11 +344,12 @@ class GroupedDataPreparation(DataPreparation):
 
     COMPLETE_GROUP_ID: GroupID
 
-    def __init__(self, complete_only: bool):
+    def __init__(self, complete_only: bool, undersample: bool = UNDERSAMPLE):
         super().__init__()
         self.complete_only = complete_only
         self.grouped_it = {}
         self.grouped_add = {}
+        self.undersample = undersample
 
     def pos_weight(self, target: int) -> float:
         self._try_load_preprocessed_data([Split.TRAIN])
@@ -581,6 +511,7 @@ class GroupedDataPreparation(DataPreparation):
                 split: CombinedDataLoader(
                     (split == Split.TRAIN),
                     *[d[split] for d in separate_dataloaders.values()],
+                    undersample=self.undersample
                 )
                 for split in splits
             }
@@ -602,6 +533,7 @@ class GroupedDataPreparation(DataPreparation):
                 split: CombinedDataLoader(
                     (split == Split.TRAIN),
                     *[d[split] for d in separate_dataloaders.values()],
+                    undersample=self.undersample
                 )
                 for split in splits
             }
@@ -675,7 +607,7 @@ class ExperimentFeatureSetDataPreparation:
         self._columns_for_training = None
         self.save_dir = f"{base_dir}/experiment/run{RUN}"
         self.complete_only = complete_only
-        self.grouped_it = {}        
+        self.grouped_it = {}
 
     def prepare_data(self, input_path: str = EXPERIMENTAL_INPUT_PATH) -> None:
         """prepare_data loads and preprocesses data.
@@ -819,7 +751,8 @@ class ExperimentFeatureSetDataPreparation:
 
         return CombinedDataLoader(
             True,
-            *dataloaders.values()
+            *dataloaders.values(),
+            undersample=self.undersample
         )
 
     def load_columns(self) -> list[str]:
@@ -862,15 +795,6 @@ class ExperimentFeatureSetDataPreparation:
                 group_size = len(group.index)
                 smallest_group_size = min(smallest_group_size, group_size)
         print(f"Group count: {len(groups)}")
-
-        # undersampling
-        if self.undersample:
-            for key, group in groups.items():
-                to_drop = len(group.index) - smallest_group_size
-                if to_drop > 0:
-                    # TODO: set configurable seed for sampling to get repeatable results
-                    groups[key] = groups[key].sample(frac=1).reset_index(drop=True) # shuffles data frame
-                    groups[key].drop(groups[key].tail(to_drop).index, inplace=True)
 
         return groups
 
@@ -929,4 +853,4 @@ class DANNGroupedDataPreparationWrapper:
         Returns:
             list[GroupID]: list of group ids
         """
-        return self.source.get_group_ids()  
+        return self.source.get_group_ids()

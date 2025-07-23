@@ -2,31 +2,11 @@
 """
 
 from enum import Enum
-from typing import MutableMapping, NewType
-
-from torch import Tensor
-
-from pdi.data.constants import NSIGMA_COLUMNS
-from pdi.data.config import GET_NSIGMA
+from typing import NewType
 
 Split = Enum("Split", ["TRAIN", "VAL", "TEST"])
-InputTarget = Enum("InputTarget", ["INPUT", "TARGET"])
-Additional_list = [
-    "fP",
-    "fTPCSignal",
-    "fBeta",
-    "fPt",
-    "fSign",
-]
-
-if GET_NSIGMA:
-    Additional_list += NSIGMA_COLUMNS
-Additional = Enum("Additional", Additional_list)
-
+InputTarget = Enum("InputTarget", ["INPUT", "TARGET", "UNSTANDARDIZED"])
 GroupID = NewType("GroupID", int)
-
-DatasetItem = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]
-
 
 class Detector(Enum):
     TPC = 1

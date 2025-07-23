@@ -46,21 +46,18 @@ def train_one_epoch_dann(model, target_code, source_train_loader, target_train_l
     return final_loss / count
 
 
-def train_one_epoch(model, target_code, train_loader, device, optimizer, loss_fun):
+def train_one_epoch(model, target_code, train_loader, device, optimizer, loss_fun, log_every: int = 50):
     model.train()
-    LOG_EVERY = 50
     loss_run_sum = 0
     final_loss = 0.0
     count = 0
-    for i, (input_data, targets, data_dict) in enumerate(tqdm(train_loader), start=1):
+    for i, (input_data, targets, gid, data_dict) in enumerate(tqdm(train_loader), start=1):
         input_data = input_data.to(device)
         binary_targets = (targets == target_code).type(torch.float).to(device)
         optimizer.zero_grad()
 
-        group_id = data_dict.get(GROUP_ID_KEY)
-        # TODO: move NNEnsemble group choice inside model
         if isinstance(model, NeuralNetEnsemble):
-            out = model(input_data, group_id)
+            out = model(input_data, gid[0])
         else:
             out = model(input_data)
         loss = loss_fun(out, binary_targets)
@@ -68,7 +65,7 @@ def train_one_epoch(model, target_code, train_loader, device, optimizer, loss_fu
         optimizer.step()
 
         loss_run_sum += loss.item()
-        if i % LOG_EVERY == 0:
+        if i % log_every == 0:
             wandb.log({"loss": loss_run_sum})
             loss_run_sum = 0
 

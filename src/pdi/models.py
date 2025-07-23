@@ -10,17 +10,71 @@ AttentionModel
     Attention-based model used for processing incomplete examples.
 """
 
+from ast import Tuple
 from typing import Optional
 
 import torch
-from torch import nn
+from torch import dropout, nn
 from torch import Tensor
 from torch.nn.functional import one_hot
 from torch.autograd import Function
+from torch.nn.modules import activation
 
+from pdi.data.config import ModelConfig
 from pdi.data.constants import N_COLUMNS
 from pdi.data.types import GroupID
 
+ACTIVATIONS = {
+    "ReLU": nn.ReLU
+}
+
+def build_model(cfg: ModelConfig, **add_cfg):
+    if cfg.architecture == "MLP":
+        return NeuralNet(
+            layers=cfg.mlp.layers,
+            activation=ACTIVATIONS[cfg.mlp.activation],
+            dropout=cfg.mlp.dropout,
+        )
+    elif cfg.architecture == "Ensemble":
+        if "group_ids" not in add_cfg.keys():
+            raise KeyError("group_ids named parameter must be specifier for Ensemble model!")
+
+        return NeuralNetEnsemble(
+            group_ids=add_cfg["group_ids"],
+            hidden_layers=cfg.ensemble.hidden_layers,
+            activation=ACTIVATIONS[cfg.ensemble.activation],
+            dropout=cfg.ensemble.dropout,
+        )
+    elif cfg.architecture == "Attention":
+        return AttentionModel(
+            in_dim=N_COLUMNS,
+            embed_hidden=cfg.attention.embed_hidden,
+            embed_dim=cfg.attention.embed_dim,
+            ff_hidden=cfg.attention.ff_hidden,
+            pool_hidden=cfg.attention.pool_hidden,
+            num_heads=cfg.attention.num_heads,
+            num_blocks=cfg.attention.num_blocks,
+            activation=ACTIVATIONS[cfg.attention.activation],
+            dropout=cfg.attention.dropout
+        )
+    elif cfg.architecture == "AttentionDANN":
+        if "in_dim" not in add_cfg.keys():
+            raise KeyError("in_dim named parameter must be specifier for AttentionDANN model!")
+
+        return AttentionModelDANN(
+            in_dim=add_cfg["in_dim"],
+            embed_hidden=cfg.attention_dann.attention.embed_hidden,
+            embed_dim=cfg.attention_dann.attention.embed_dim,
+            ff_hidden=cfg.attention_dann.attention.ff_hidden,
+            pool_hidden=cfg.attention_dann.attention.pool_hidden,
+            num_heads=cfg.attention_dann.attention.num_heads,
+            num_blocks=cfg.attention_dann.attention.num_blocks,
+            activation=ACTIVATIONS[cfg.attention_dann.attention.activation],
+            dropout=cfg.attention_dann.attention.dropout,
+            alpha=cfg.attention_dann.alpha,
+        )
+    else:
+        raise KeyError(f"Architecture {cfg.architecture} does not exist!")
 
 class NeuralNet(nn.Module):
     """NeuralNet is a basic neural network with variable layer dimensions, activation function and optional dropout."""
@@ -85,10 +139,8 @@ class NeuralNetEnsemble(nn.Module):
             }
         )
 
-    def forward(self, x: Tensor, group: Tensor):
-        if not torch.all(group == group[0]):
-            raise ValueError("Not all tensors in batch belong to the same group.")
-        return self.models[str(group[0].numpy()[0])](x)
+    def forward(self, x: Tensor, group_id: GroupID):
+        return self.models[str(group_id)](x)
 
 
 class AttentionModel(nn.Module):
@@ -210,14 +262,16 @@ class AttentionModelDANN(AttentionModel):
         num_blocks: int,
         activation: nn.Module = nn.ReLU,
         dropout: float = 0.4,
+        alpha: float = 1.0,
     ):
         super().__init__(
             in_dim, embed_hidden, embed_dim, ff_hidden, pool_hidden, num_heads, num_blocks, activation, dropout
         )
         # TODO: should I use different architecture for the domain classifier? I should do sweeps to find out.
         self.domain_classifier = NeuralNet([embed_dim, pool_hidden, 1], activation)
+        self.alpha = alpha
     
-    def forward(self, x: Tensor, alpha: float = 1.0) -> Tensor:
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         # Feature extraction part
         feature = self.to_feature_set(x)
         feature = self.emb(feature)
@@ -226,7 +280,7 @@ class AttentionModelDANN(AttentionModel):
         feature = self.pool(feature)
 
         # Domain adversarial part
-        reverse_x = ReverseLayerF.apply(feature, alpha)
+        reverse_x = ReverseLayerF.apply(feature, self.alpha)
         domain_posterior = self.domain_classifier(reverse_x)
 
         # Classifier part
