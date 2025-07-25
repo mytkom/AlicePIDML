@@ -17,7 +17,7 @@
             }
         },
         "lr_scheduler": "Exponential",
-        "device": "cuda",
+        "device": "cpu",
         "loss": "cross entropy",
         "steps_to_log": 50,
         "batch_size": 32,
@@ -44,7 +44,7 @@
         "split_seed": 0
     },
     "model": {
-        "architecture": "Attention",
+        "architecture": "MLP",
         "mlp": {
             "hidden_layers": [
                 64,
@@ -76,7 +76,7 @@
             "dropout": 0.4
         },
         "attention_dann": {
-            "dom_hidden_layers": [
+            "dom_layers": [
                 64,
                 32,
                 16
@@ -95,13 +95,13 @@
         }
     },
     "sweep": {
-        "config": "",
-        "name": "sweep",
-        "project_name": "default_project"
+      "config": "/home/mytkom/Documents/alice/pdi_temp/pdi/engines_test/sweep_config.json",
+      "name": "Architecture test sweep",
+      "project_name": "Architecture sweeps"
     },
-    "sim_dataset_paths": [],
-    "exp_dataset_paths": [],
-    "project_dir": "project",
+    "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
+    "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
+    "project_dir": "engines_test",
     "log_dir": "logs",
     "mixed_precision": "no",
     "seed": 0,

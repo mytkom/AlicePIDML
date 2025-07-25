@@ -34,27 +34,34 @@
             "iqr": {}
         },
         "outlier_filtering_method": null,
-        "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
-        "exp_dataset_paths": [],
         "train_size": 0.55,
         "test_size": 0.2,
         "undersample_missing_detectors": true,
+        "undersample_pions": true,
         "weight_particles_species": false,
         "is_run_3": true,
         "complete_only": false,
         "split_seed": 0
     },
     "model": {
-        "architecture": "Attention",
+        "architecture": "Ensemble",
         "mlp": {
-            "layers": [],
+            "hidden_layers": [
+                64,
+                32,
+                16
+            ],
             "missing_data_strategy": "mean",
             "activation": "ReLU",
             "dropout": 0.9
         },
         "ensemble": {
             "group_ids": [],
-            "hidden_layers": [],
+            "hidden_layers": [
+                64,
+                32,
+                16
+            ],
             "activation": "ReLU",
             "dropout": 0.9
         },
@@ -69,7 +76,11 @@
             "dropout": 0.4
         },
         "attention_dann": {
-            "dom_layers": [],
+            "dom_layers": [
+                64,
+                32,
+                16
+            ],
             "attention": {
                 "embed_hidden": 128,
                 "embed_dim": 32,
@@ -83,6 +94,8 @@
             "alpha": 2.0
         }
     },
+    "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
+    "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
     "project_dir": "project",
     "log_dir": "logs",
     "mixed_precision": "no",

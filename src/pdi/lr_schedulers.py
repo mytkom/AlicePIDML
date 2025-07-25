@@ -1,6 +1,6 @@
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import ExponentialLR
-from pdi.data.config import TrainingConfig
+from pdi.config import TrainingConfig
 
 def build_lr_scheduler(cfg: TrainingConfig, optimizer: Optimizer):
     if cfg.lr_scheduler == "Exponential":

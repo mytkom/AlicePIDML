@@ -1,4 +1,6 @@
+import dataclasses
 import gzip
+from itertools import cycle
 import json
 import os
 import pickle
@@ -11,39 +13,180 @@ from pathlib import Path
 from random import Random
 from typing import Callable, Generic, Iterable, Iterator, Tuple, TypeVar, Optional, List, MutableMapping
 from sklearn.model_selection import train_test_split
-from torch import Tensor
+from torch import Tensor, rand
 from torch.utils.data import DataLoader, Dataset
 
+from pdi.constants import PARTICLES_DICT
 from pdi.data.group_id_helpers import binary_array_to_group_id
 from pdi.data.constants import (
     PROCESSED_DIR,
     TARGET_COLUMN,
-    TEST_SIZE,
-    TRAIN_SIZE,
     COLUMNS_FOR_TRAINING,
     NSIGMA_COLUMNS,
 )
 from pdi.data.types import GroupID, InputTarget, Split
-from pdi.data.config import DataConfig
+from pdi.config import DataConfig
 
-def calculate_checksum(filenames: list[str]) -> str:
+# Target code (ground truth) is available in Monte Carlo (simulated) data
+# Tuple[standardized inputs tensor, target codes tensor, GroupID, undstandardized data]
+MCBatchItem = tuple[Tensor, Tensor, GroupID, MutableMapping[str, Tensor]]
+# GroupID -> Tensor in typing https://github.com/pytorch/pytorch/issues/119123
+MCBatchItemOut = tuple[Tensor, Tensor, Tensor, MutableMapping[str, Tensor]]
+
+# Target code (ground truth) is not available in Experimental (real) data
+# Tuple[standardized inputs tensor, GroupID, undstandardized data]
+ExpBatchItem = tuple[Tensor, GroupID, MutableMapping[str, Tensor]]
+# GroupID -> Tensor in typing https://github.com/pytorch/pytorch/issues/119123
+ExpBatchItemOut = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]
+
+class MCDataset(Dataset[MCBatchItem]):
+    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
+    """
+
+    def __init__(
+        self,
+        input: Tensor,
+        target: Tensor,
+        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
+        **unstandardized: Tensor,
+    ):
+        """__init__
+
+        Args:
+            input (Tensor): tensor containing all inputtensors
+            target (Tensor): tensor containing all target tensors
+            group_id (GroupID): group id of missing detectors group
+            **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
+        """
+        self._input = input
+        self._target = target
+        self._group_id = group_id
+        self._unstandardized = unstandardized
+
+    def __len__(self) -> int:
+        return self._target.shape[0]
+
+    def __getitem__(self, index: int) -> MCBatchItem:
+        return (
+            self._input[index],
+            self._target[index],
+            self._group_id,
+            {key: val[index] for key, val in self._unstandardized.items()},
+        )
+
+
+class ExpDataset(Dataset[ExpBatchItem]):
+    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
+    """
+
+    def __init__(
+        self,
+        input: Tensor,
+        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
+        **unstandardized: Tensor,
+    ):
+        """__init__
+
+        Args:
+            input (Tensor): tensor containing all inputtensors
+            group_id (GroupID): group id of missing detectors group
+            **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
+        """
+        self._input = input
+        self._group_id = group_id
+        self._unstandardized = unstandardized
+
+    def __len__(self) -> int:
+        return self._input.shape[0]
+
+    def __getitem__(self, index: int) -> ExpBatchItem:
+        return (
+            self._input[index],
+            self._group_id,
+            {key: val[index] for key, val in self._unstandardized.items()},
+        )
+
+
+InT = TypeVar("InT")
+OutT = TypeVar("OutT")
+
+class CombinedDataLoader(Generic[InT, OutT]):
+    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches."""
+
+    def __init__(self, shuffle: bool, undersample: bool, seed: int, *dataloaders: DataLoader[InT]):
+        """__init__
+
+        Args:
+            shuffle (bool): whether to change item order with each iteration.
+            *dataloaders (DataLoader): a list of dataloaders to combine.
+        """
+        self.shuffle = shuffle
+        self.dataloaders = dataloaders
+        self.undersample = undersample
+        self.rng = Random(seed)
+        self.seed = seed
+
+    def _reset_seed(self):
+        self.rng = Random(self.seed)
+
+    # TODO: test undersampling implementation (it was not tested)
+    def __iter__(self) -> Iterator[OutT]:
+        if not self.shuffle:
+            self._reset_seed()
+
+        iters = [iter(d) for d in self.dataloaders]
+
+        end_iteration = False
+        if self.undersample:
+            while True:
+               for it in iters:
+                    try:
+                        yield next(it)
+                    except StopIteration:
+                        end_iteration = True
+               if end_iteration:
+                   break
+            return
+
+        while iters:
+            it = self.rng.choice(iters)
+            try:
+                yield next(it)
+            except StopIteration:
+                iters.remove(it)
+
+    def __len__(self) -> int:
+        if self.undersample:
+            return len(self.dataloaders) * min([len(d) for d in self.dataloaders])
+        return sum(len(d) for d in self.dataloaders)
+
+
+def calculate_checksum(filenames: list[str], config: DataConfig) -> str:
+    """
+    Calculate a checksum based on the contents of the given files and a config object.
+
+    Args:
+        filenames (list[str]): List of file paths to include in the checksum.
+        config (object): A dataclass instance representing the configuration.
+
+    Returns:
+        str: The calculated checksum as a hexadecimal string.
+    """
     hash = hashlib.md5()
+
+    # Include file contents in the checksum
     for fn in filenames:
         try:
             hash.update(Path(fn).read_bytes())
         except IsADirectoryError:
             pass
+
+    # Serialize the config object to JSON and include it in the checksum
+    dict_config = dataclasses.asdict(config)
+    config_json = json.dumps(dict_config, sort_keys=True)
+    hash.update(config_json.encode('utf-8'))
+
     return hash.hexdigest()
-
-# Target code (ground truth) is available in Monte Carlo (simulated) data
-# Tuple[standardized inputs tensor, target codes tensor, GroupID, undstandardized data]
-MCBatchItem = Tuple[Tensor, Tensor, GroupID, MutableMapping[str, Tensor]]
-
-# Target code (ground truth) is not available in Experimental (real) data
-# Tuple[standardized inputs tensor, GroupID, undstandardized data]
-ExpBatchItem = Tuple[Tensor, GroupID, MutableMapping[str, Tensor]]
-
-T = TypeVar("T")
 
 def is_experimental_data(table_name):
     if "mc" in table_name:
@@ -55,7 +198,7 @@ def is_extended_data(table_name):
         return False
     return True
 
-def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame | pd.Series, bool, bool]:
+def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
     """
         Load given list of root files into pandas DataFrame. This function automatically detect,
         which out of possible tables is saved in files:
@@ -118,7 +261,9 @@ class GeneralDataPreparation:
             raise KeyError("You must specify at least one input_path with data!")
 
         # Calculate checsum for input_paths' files, so caching results will be reliable and unique for this set of files
-        self._inputs_checksum = calculate_checksum(input_paths)
+        self._log("Calculating input_paths + configuration checksum:")
+        self._inputs_checksum = calculate_checksum(input_paths, config)
+        self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
         self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
         self._input_paths: List[str] = input_paths
@@ -148,7 +293,8 @@ class GeneralDataPreparation:
 
         # When after splits some particle specie track is unique in its group,
         # it raises an error in some point, TODO: do it cleaner way
-        data = self._delete_unique_targets(data)
+        if not self._is_experimental:
+            data = self._delete_unique_targets(data)
 
         # When there is no detector value in data some special
         # values indicating missing values are returned e.g. -999.0.
@@ -163,6 +309,11 @@ class GeneralDataPreparation:
         # Split dataset into Train/Validation/Test
         #   split ratios are specified in DataConfig self._cfg
         test_train_split: dict[Split, pd.DataFrame] = self._test_train_split(data)
+
+        # Undersample (anti)pions to the next majority group in the training split
+        # for simulated data.
+        if self._cfg.undersample_pions and not self._is_experimental:
+            test_train_split[Split.TRAIN] = self._undersample_pions(test_train_split[Split.TRAIN])
 
         # Standardization parameters (mean, std) based on train split
         #   results are saved in self._scaling_params
@@ -191,7 +342,7 @@ class GeneralDataPreparation:
 
     def create_dataloaders(
         self, batch_size: int, num_workers: int, undersample: bool, seed: int, splits: Optional[list[Split]] = None
-    ) -> tuple[Iterable[MCBatchItem] | Iterable[ExpBatchItem], ...]:
+    ) -> tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
 
         Args:
@@ -238,7 +389,7 @@ class GeneralDataPreparation:
             }
             dataloaders[split] = CombinedDataLoader(
                 (split == Split.TRAIN),
-                undersample,
+                (split == Split.TRAIN and undersample),
                 seed,
                 *[
                     DataLoader(
@@ -253,10 +404,10 @@ class GeneralDataPreparation:
 
         return (*dataloaders.values(),)
 
-    def transform_prepared_data(self, transform: Callable[[PreparedData], None]):
+    def transform_prepared_data(self, transform: Callable[[PreparedData], PreparedData]):
         self._load_or_prepare_data([Split.TRAIN, Split.VAL, Split.TEST])
 
-        transform(self._prepared_data)
+        self._prepared_data = transform(self._prepared_data)
 
     def pos_weight(self, target: int) -> float:
         if self._is_experimental:
@@ -319,7 +470,7 @@ class GeneralDataPreparation:
                 )
             )
 
-    def _load_data(self) -> pd.DataFrame | pd.Series:
+    def _load_data(self) -> pd.DataFrame:
         data, self._is_experimental, self._is_extended = load_root_data(self._input_paths)
 
         if self._is_experimental:
@@ -335,15 +486,15 @@ class GeneralDataPreparation:
         return data
 
     # TODO: inspect, why it is needed---what code do not work if such targets exists
-    def _delete_unique_targets(self, data):
+    def _delete_unique_targets(self, data: pd.DataFrame) -> pd.DataFrame:
         THRESHOLD = 400
         target_counts = data[TARGET_COLUMN].value_counts()
         for target, count in target_counts.items():
             if count < THRESHOLD:
-                data = data[data[TARGET_COLUMN] != target]
+                data = data.loc[data[TARGET_COLUMN] != target, :]
         return data
 
-    def _make_missing_null(self, data):
+    def _make_missing_null(self, data: pd.DataFrame) -> pd.DataFrame:
         for column, val in self.MISSING_VALUE_INDICATORS.items():
             data.loc[data[column] == val, column] = np.NaN
 
@@ -353,15 +504,16 @@ class GeneralDataPreparation:
             data["fTRDPattern"].mask(np.isclose(data["fTRDPattern"], 0), inplace=True)
             data.loc[data["fTRDPattern"].isnull(), ["fTRDSignal", "fTRDPattern"]] = np.NaN
             data.loc[data["fBeta"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
+            data.loc[data["fTOFSignal"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
             self._log("Run 3 missing values applied!")
         else:
             self._log("Run 2 missing values applied!")
 
         return data
 
-    def _perform_cuts(self, data):
+    def _perform_cuts(self, data: pd.DataFrame) -> pd.DataFrame:
         # TCPSignal must be positive
-        data = data[data["fTPCSignal"] > 0]
+        data = data.loc[data["fTPCSignal"] > 0, :]
 
         # TPCSignal sometimes gives huge incorrect values, which negatively impacts standardization
         # maybe outlier detection methods can handle it nicely (for now I leave it be)
@@ -370,18 +522,18 @@ class GeneralDataPreparation:
 
         # TOF is said to be incorrect even if present if Pt is lower than 0.5 GeV/C
         PT_CUT = 0.5
-        data.loc[data["fPt"] < PT_CUT, ["fTOFBeta", "fTOFSignal"]] = np.NaN
+        data.loc[data["fPt"] < PT_CUT, ["fBeta", "fTOFSignal"]] = np.NaN
 
         return data
 
-    def _test_train_split(self, data) -> dict[Split, pd.DataFrame]:
-        train_to_val_ratio = TRAIN_SIZE / (1 - TEST_SIZE)
+    def _test_train_split(self, data: pd.DataFrame) -> dict[Split, pd.DataFrame]:
+        train_to_val_ratio = self._cfg.train_size / (1 - self._cfg.test_size)
 
         (data_not_test, test_data) = train_test_split(
             data,
-            test_size=TEST_SIZE,
+            test_size=self._cfg.test_size,
             random_state=self._cfg.split_seed,
-            stratify=data.loc[:, [TARGET_COLUMN]],
+            stratify=None if self._is_experimental else data.loc[:, [TARGET_COLUMN]],
         )
         data_not_test = pd.DataFrame(data_not_test)
 
@@ -389,17 +541,57 @@ class GeneralDataPreparation:
             data_not_test,
             train_size=train_to_val_ratio,
             random_state=self._cfg.split_seed,
-            stratify=data_not_test.loc[:, [TARGET_COLUMN]],
+            stratify=None if self._is_experimental else data_not_test.loc[:, [TARGET_COLUMN]],
         )
 
         self._log(f"Dataset has been splitted in the following ratios:")
-        self._log(f"\tTrain {TRAIN_SIZE}, Validation {1 - TEST_SIZE - TRAIN_SIZE}, Test {TEST_SIZE}")
+        self._log(f"\tTrain {self._cfg.train_size}, Validation {1 - self._cfg.test_size - self._cfg.train_size:.2f}, Test {self._cfg.test_size}")
 
         return {
             Split.TRAIN: pd.DataFrame(train_data),
             Split.VAL: pd.DataFrame(val_data),
             Split.TEST: pd.DataFrame(test_data)
         }
+
+    def _undersample_pions(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Undersample pions (211) and anti-pions (-211) to match the maximum count of other particle groups.
+
+        Args:
+            data (pd.DataFrame): Input DataFrame with a TARGET_COLUMN.
+
+        Returns:
+            pd.DataFrame: DataFrame with undersampled pions and anti-pions.
+        """
+        rng = Random(self._cfg.split_seed)  # Seed for reproducibility
+
+        # Group data by the target column
+        groups = data.groupby(TARGET_COLUMN, dropna=False)
+
+        # Calculate the maximum count of non-pion groups
+        non_pion_counts = groups.size().drop([211, -211], errors="ignore")
+        max_count = max(non_pion_counts.values.astype(int))
+
+        # Print group sizes before undersampling
+        self._log("Sizes of particle groups in training split before undersampling of pions:")
+        self._log(str(groups.size().to_dict()))
+
+        # Undersample pions and anti-pions
+        sampled_indices = []
+        for target, group_indices in groups.groups.items():
+            if target in [211, -211]:  # Pions and anti-pions
+                sampled_indices.extend(rng.sample(list(group_indices), min(len(group_indices), max_count)))
+            else:  # Keep all other particles
+                sampled_indices.extend(group_indices)
+
+        # Create a new DataFrame with the sampled indices
+        undersampled_data = data.loc[sampled_indices]
+
+        # Print group sizes after undersampling
+        self._log("Sizes of particle groups in training split after undersampling of pions:")
+        self._log(str(undersampled_data.groupby(TARGET_COLUMN, dropna=False).size().to_dict()))
+
+        return undersampled_data
 
     def _calc_scaling_params(self, train_split: pd.DataFrame):
         for column in train_split.columns:
@@ -471,6 +663,8 @@ class GeneralDataPreparation:
             self._is_experimental = metadata["is_experimental"]
             self._is_extended = metadata["is_extended"]
 
+        self._log("Successfuly loaded preprocessed data! No need for from scratch preparation.")
+
     def _try_load_preprocessed_data(self, splits) -> bool:
         if any(
             key not in self._prepared_data
@@ -478,121 +672,17 @@ class GeneralDataPreparation:
         ):
             try:
                 self._load_preprocessed_data(splits)
-            except:
+            except FileNotFoundError:
                 return False
 
         return True
 
     def _load_or_prepare_data(self, splits):
         if not self._try_load_preprocessed_data(splits):
+            self._log("Cannot load preprocessed data, preparing it from scratch:")
             self.prepare_data()
 
     def _log(self, message: str):
         print(f"[DataPreparation] {message}")
 
-
-class CombinedDataLoader(Generic[T]):
-    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches."""
-
-    def __init__(self, shuffle: bool, undersample: bool, seed: int, *dataloaders: DataLoader[T]):
-        """__init__
-
-        Args:
-            shuffle (bool): whether to change item order with each iteration.
-            *dataloaders (DataLoader): a list of dataloaders to combine.
-        """
-        self.shuffle = shuffle
-        self.dataloaders = dataloaders
-        self.rng = Random(seed)
-        self.seed = seed
-
-    def _reset_seed(self):
-        self.rng = Random(self.seed)
-
-    # TODO: test undersampling implementation (it was not tested)
-    def __iter__(self) -> Iterator[T]:
-        if not self.shuffle:
-            self._reset_seed()
-
-        self.len = sum(len(dl) for dl in self.dataloaders)
-
-        iters = [iter(d) for d in self.dataloaders]
-
-        while iters:
-            it = self.rng.choice(iters)
-            try:
-                yield next(it)
-            except StopIteration:
-                iters.remove(it)
-
-    def __len__(self) -> int:
-        return sum(len(d) for d in self.dataloaders)
-
-
-class MCDataset(Dataset[MCBatchItem]):
-    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
-    """
-
-    def __init__(
-        self,
-        input: Tensor,
-        target: Tensor,
-        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
-        **unstandardized: Tensor,
-    ):
-        """__init__
-
-        Args:
-            input (Tensor): tensor containing all inputtensors
-            target (Tensor): tensor containing all target tensors
-            group_id (GroupID): group id of missing detectors group
-            **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
-        """
-        self._input = input
-        self._target = target
-        self._group_id = group_id
-        self._unstandardized = unstandardized
-
-    def __len__(self) -> int:
-        return self._target.shape[0]
-
-    def __getitem__(self, index: int) -> MCBatchItem:
-        return (
-            self._input[index],
-            self._target[index],
-            self._group_id,
-            {key: val[index] for key, val in self._unstandardized.items()},
-        )
-
-
-class ExpDataset(Dataset[ExpBatchItem]):
-    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
-    """
-
-    def __init__(
-        self,
-        input: Tensor,
-        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
-        **unstandardized: Tensor,
-    ):
-        """__init__
-
-        Args:
-            input (Tensor): tensor containing all inputtensors
-            group_id (GroupID): group id of missing detectors group
-            **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
-        """
-        self._input = input
-        self._group_id = group_id
-        self._unstandardized = unstandardized
-
-    def __len__(self) -> int:
-        return self._input.shape[0]
-
-    def __getitem__(self, index: int) -> ExpBatchItem:
-        return (
-            self._input[index],
-            self._group_id,
-            {key: val[index] for key, val in self._unstandardized.items()},
-        )
 

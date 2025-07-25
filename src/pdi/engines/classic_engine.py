@@ -1,20 +1,20 @@
-from typing import Iterable, cast
+from typing import cast
 from joblib.pool import np
 from numpy.typing import NDArray
 from torch.functional import Tensor
 import torch
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
-from tqdm.gui import tqdm
+from tqdm import tqdm
 import wandb
-from pdi.data.config import Config
-from pdi.data.data_preparation import MCBatchItem, GeneralDataPreparation
+from pdi.config import Config
+from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, GeneralDataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
 from pdi.losses import build_loss
-from pdi.models import NeuralNet, NeuralNetEnsemble, build_model
+from pdi.models import NeuralNetEnsemble, build_model
 from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
@@ -24,7 +24,7 @@ class ClassicEngine(BaseEngine):
         self._cfg = cfg
         self._models: dict[int, torch.nn.Module] = {}
 
-        self._data_prep = GeneralDataPreparation(cfg.data, cfg.data.sim_dataset_paths)
+        self._data_prep = GeneralDataPreparation(cfg.data, cfg.sim_dataset_paths)
 
         if self._cfg.model.architecture == "MLP":
             # Deal with missing data inplace on PreparedData object
@@ -42,8 +42,9 @@ class ClassicEngine(BaseEngine):
 
 
     def train(self, target_code: int) -> TrainResults:
-        wandb.init(config=self._cfg.to_dict())
-        model = build_model(self._cfg.model)
+        if wandb.run is None:
+            wandb.init(config=self._cfg.to_dict())
+        model = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
 
         pos_weight = None
         # TODO: check if it works as expected, compare results with it and without
@@ -65,22 +66,22 @@ class ClassicEngine(BaseEngine):
                 model=model,
                 optimizer=optimizer,
                 loss_func=loss,
-                dataloader=cast(Iterable[MCBatchItem], self._train_dl),
+                dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._train_dl),
             )
 
             # Validation
             val_metrics, _ = self._evaluate(
                 target_code=target_code,
                 model=model,
-                loss=loss,
-                dataloader=cast(Iterable[MCBatchItem], self._val_dl),
+                loss_func=loss,
+                dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._val_dl),
             )
 
             # Threshold for posterior probability to identify as positive
             # it is optimized for f1 metric
-            model.thres = Tensor(val_metrics["optimal_threshold"])
+            model.thres = torch.Tensor(np.array(val_metrics["optimal_threshold"]))
 
-            val_loss = val_metrics['loss']
+            val_loss = val_metrics["loss"]
 
             # New learning rate for the next
             scheduler.step()
@@ -104,7 +105,7 @@ class ClassicEngine(BaseEngine):
             )
 
             loss_arr.append(train_loss)
-            val_loss_arr.append(val_metrics['loss'])
+            val_loss_arr.append(val_loss)
 
             self._early_stopping_step(val_loss, min_loss)
             if  val_loss < min_loss:
@@ -118,23 +119,38 @@ class ClassicEngine(BaseEngine):
 
         return loss_arr, val_loss_arr
 
-    def _train_one_epoch(self, target_code: int, model: torch.nn.Module, optimizer: Optimizer, loss_func: _Loss, dataloader: Iterable[MCBatchItem]) -> float:
+    def test(self, target_code: int) -> TestResults:
+        loss_func: _Loss = build_loss(self._cfg.training)
+
+        metrics, results = self._evaluate(
+            target_code=target_code,
+            model=self._models[target_code],
+            loss_func=loss_func,
+            dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl),
+        )
+
+        self._log_results(metrics, target_code=target_code, csv_name=f"test_metrics.csv")
+        self._save_test_results(results, target_code=target_code)
+
+        print(metrics)
+        return metrics, results
+
+    def _train_one_epoch(self, target_code: int, model: torch.nn.Module, optimizer: Optimizer, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> float:
         model.train()
         group_losses: dict[GroupID, NDArray] = {}
         loss_run_sum = 0
         final_loss = 0.0
         count = 0
 
-        for i, (input_data, targets, gid, _) in enumerate(tqdm(dataloader), start=1):
+        for i, (input_data, targets, gids, _) in enumerate(tqdm(dataloader), start=1):
+            # Constant value for a batch, but cannot obtain single value with pytorch interface
+            gid: GroupID = cast(GroupID, int(gids[0]))
+
             input_data = input_data.to(self._cfg.training.device)
             binary_targets = (targets == target_code).type(torch.float).to(self._cfg.training.device)
             optimizer.zero_grad()
 
-            # Model training step
-            if isinstance(model, NeuralNetEnsemble):
-                out = model(input_data, gid)
-            else:
-                out = model(input_data)
+            out = model(input_data)
             loss = loss_func(out, binary_targets)
             loss.backward()
             optimizer.step()
@@ -146,14 +162,14 @@ class ClassicEngine(BaseEngine):
 
             # TODO: decide if it is useful or not; should I log_every tens of steps too?
             self._log_results(
-                metrics={ "loss": loss },
+                metrics={ "loss": loss.item() },
                 target_code=target_code,
                 step=i,
                 csv_name=f"gid_{gid}_training_loss.csv"
             )
             if gid not in group_losses.keys():
                 group_losses[gid] = np.array([])
-            np.append(group_losses[gid], loss)
+            np.append(group_losses[gid], loss.item())
 
             if i % self._cfg.training.steps_to_log == 0:
                 self._log_results(
@@ -166,6 +182,9 @@ class ClassicEngine(BaseEngine):
 
         # No epoch number here, order of logged results must be sufficient
         for gid, gid_losses in group_losses.items():
+            if len(gid_losses) == 0:
+                continue
+
             self._log_results(
                 metrics = {
                     "gid": gid,
@@ -179,7 +198,7 @@ class ClassicEngine(BaseEngine):
 
         return final_loss / count
 
-    def _evaluate(self, target_code: int, model: torch.nn.Module, loss: _Loss, dataloader: Iterable[MCBatchItem]) -> TestResults:
+    def _evaluate(self, target_code: int, model: torch.nn.Module, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> TestResults:
         predictions = []
         targets = []
         unstandardized_data = {}
@@ -188,31 +207,27 @@ class ClassicEngine(BaseEngine):
         count = 0
 
         model.eval()
-        for _ in range(1):
-            for input_data, target, gid, data_dict in tqdm(dataloader):
-                targets.extend(target.numpy())
-                input_data_tensors.extend(input_data.numpy())
-                for k, v in data_dict.items():
-                    if k not in unstandardized_data:
-                        unstandardized_data[k] = []
-                    unstandardized_data[k].extend(v.numpy())
+        for input_data, target, gid, data_dict in tqdm(dataloader):
+            targets.extend(target.numpy())
+            input_data_tensors.extend(input_data.numpy())
+            for k, v in data_dict.items():
+                if k not in unstandardized_data:
+                    unstandardized_data[k] = []
+                unstandardized_data[k].extend(v.numpy())
 
-                input_data = input_data.to(self._cfg.training.device)
+            input_data = input_data.to(self._cfg.training.device)
 
-                # TODO: maybe move NNEnsemble group choice inside model
-                if isinstance(model, NeuralNetEnsemble):
-                    out = model(input_data, gid)
-                else:
-                    out = model(input_data)
+            out = model(input_data)
 
-                # loss
-                binary_target = (target == target_code).type(torch.float).to(self._cfg.training.device)
-                val_loss += loss(out, binary_target).item()
-                count += 1
+            # loss
+            binary_target = (target == target_code).type(torch.float).to(self._cfg.training.device)
+            loss = loss_func(out, binary_target)
+            val_loss += loss.item()
+            count += 1
 
-                # save data
-                predict_target = torch.sigmoid(out)
-                predictions.extend(predict_target.cpu().detach().numpy())
+            # save data
+            predict_target = torch.sigmoid(out)
+            predictions.extend(predict_target.cpu().detach().numpy())
 
 
         if count == 0:
@@ -240,18 +255,3 @@ class ClassicEngine(BaseEngine):
             "loss": val_loss,
         }, results
 
-    def test(self, target_code: int) -> TestResults:
-        loss: _Loss = build_loss(self._cfg.training)
-
-        metrics, results = self._evaluate(
-            target_code=target_code,
-            model=self._models[target_code],
-            loss=loss,
-            dataloader=cast(Iterable[MCBatchItem], self._test_dl),
-        )
-
-        self._log_results(metrics, target_code=target_code, csv_name=f"test_metrics.csv")
-        self._save_test_results(results, target_code=target_code)
-
-        print(metrics)
-        return metrics, results

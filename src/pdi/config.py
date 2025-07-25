@@ -39,14 +39,6 @@ class DataConfig:
     outlier_filtering_methods: OutlierFilteringConfig = dataclasses.field(default_factory=OutlierFilteringConfig)
     outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation forest"] = None
 
-    # Paths to simulated datasets obtained using O2Physics's PIDMLProducer with ML option enabled
-    sim_dataset_paths: List[str] = dataclasses.field(default_factory=list)
-
-    # Paths to experimental datasets obtained using O2Physics's PIDMLProducer with Data option enabled
-    # Important: It will be used only by Domain Adaptation models, if you train using just
-    # simulated data, then probably, you do not need it
-    exp_dataset_paths: List[str] = dataclasses.field(default_factory=list)
-
     # Train/Validation/Test dataset split ratios. Validation is calculated automatically 1 - train_size - test_size
     train_size: float = 0.55
     test_size: float = 0.2
@@ -55,6 +47,9 @@ class DataConfig:
     # For majority classes it randomly selects different subsample every epoch.
     # Status: It proved to be necessary on Run3 data, because of 70% TPC only observations
     undersample_missing_detectors: bool = True
+
+    # TODO: description
+    undersample_pions: bool = True
 
     # If to undersample observations by particle types, e.g. if training model for proton classification,
     # ~ 3% od data is proton observations, and 97% of data is not proton observations, if this option is set
@@ -118,6 +113,7 @@ class TrainingConfig:
 
     # Batch size of observations, update of model weights will be done after full batch.
     # Bigger batch size makes direction of optimization descent more stable.
+    # Bigger batch size utilizes GPU more.
     batch_size: int = 32
 
     # If early stopping criterion would not be met, then max_epochs of training will be done
@@ -129,16 +125,21 @@ class TrainingConfig:
     # then epochs without progress counter is being reset
     early_stopping_progress_threshold: float = .001
 
-    # Num workers of data loader of torch (TODO: check if it is true)
+    # Number of subprocesses (or threads idk) pre-loading batches in parallel and delivering it
+    # to main training process. It can speed up training process with drawback of bigger CPU
+    # and RAM utilization.
     num_workers: int = 4
 
     # Choose start learning rate
     start_lr: float = 0.003
 
+def mlp_default_hidden_layers():
+    return [64, 32, 16]
+
 @dataclasses.dataclass
 class MLPConfig:
     # List of neurons in layer dimensions, first is input layer, then hidden layers, at the end output layer
-    layers: List[int] = dataclasses.field(default_factory=list)
+    hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # delete is equivalent complete-only data, mean fills missing cells with mean of this column
     # on the whole dataset and linear regression fills missing values by linear regression over
@@ -157,7 +158,7 @@ class EnsembleConfig:
     group_ids: List[int] = dataclasses.field(default_factory=list)
 
     # List of neurons in layer dimensions of hidden layers, input and output is fixed
-    hidden_layers: List[int] = dataclasses.field(default_factory=list)
+    hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # Choose non-linear activation function to be used after each layer
     activation: Literal["ReLU"] = "ReLU"
@@ -191,8 +192,8 @@ class AttentionConfig:
 
 @dataclasses.dataclass
 class AttentionDANNConfig:
-    # list of hidden layers for domain classifier
-    dom_layers: List[int] = dataclasses.field(default_factory=list)
+    # list of hidden layers sizes (number of neurons in each layer) for domain classifier
+    dom_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # Standard Attention model configuration
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
@@ -218,6 +219,17 @@ class ModelConfig:
     attention_dann: AttentionDANNConfig = dataclasses.field(default_factory=AttentionDANNConfig)
 
 @dataclasses.dataclass
+class SweepConfig:
+    # Filepath to the wandb sweep config
+    config: str = ""
+
+    # Name for the sweep for WandB
+    name: str = "sweep"
+
+    # Name of the project in WandB
+    project_name: str = "default_project"
+
+@dataclasses.dataclass
 class Config(JSONPyWizard):
     # training process related
     training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)
@@ -227,6 +239,15 @@ class Config(JSONPyWizard):
 
     model: ModelConfig = dataclasses.field(default_factory=ModelConfig)
 
+    sweep: SweepConfig = dataclasses.field(default_factory=SweepConfig)
+
+    # Paths to simulated datasets obtained using O2Physics's PIDMLProducer with ML option enabled
+    sim_dataset_paths: List[str] = dataclasses.field(default_factory=list)
+
+    # Paths to experimental datasets obtained using O2Physics's PIDMLProducer with Data option enabled
+    # Important: It will be used only by Domain Adaptation models, if you train using just
+    # simulated data, then probably, you do not need it
+    exp_dataset_paths: List[str] = dataclasses.field(default_factory=list)
     project_dir: str = "project"
     log_dir: str = "logs"
     # TODO: check if can be easily adopted, it can give us performance boost

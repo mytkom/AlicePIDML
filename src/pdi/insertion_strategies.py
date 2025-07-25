@@ -10,18 +10,12 @@ from pdi.data.group_id_helpers import group_id_to_binary_array
 from pdi.data.types import GroupID, InputTarget, Split
 
 class InsertionStrategy:
-    def __init__(self, prepared_data: PreparedData) -> None:
-        self._insert(prepared_data)
-
     @abstractmethod
-    def _insert(self, prepared_data: PreparedData):
+    def __call__(self, prepared_data: PreparedData) -> PreparedData:
         pass
 
 class MeanInsertion(InsertionStrategy):
-    def __init__(self, prepared_data: PreparedData) -> None:
-        super().__init__(prepared_data)
-
-    def insert(self, prepared_data: PreparedData):
+    def __call__(self, prepared_data: PreparedData) -> PreparedData:
         ungrouped_train_data = pd.concat([group[InputTarget.INPUT] for group in prepared_data[Split.TRAIN].values()])
         means = ungrouped_train_data.mean()
 
@@ -33,16 +27,17 @@ class MeanInsertion(InsertionStrategy):
 
                 group_data[InputTarget.INPUT].fillna(means, inplace=True)
 
+        return prepared_data
+
 # If we would like in the future to test more Regression models.
 # This class can be for sure generalize to DRY.
 class LinearRegressionInsertion(InsertionStrategy):
-    def __init__(self, prepared_data: PreparedData) -> None:
+    def __init__(self):
         self._regressions: dict[GroupID, LinearRegression] = {}
         self._missing_features_masks: dict[GroupID, NDArray] = {}
         self._regression_params: dict[GroupID, dict[str, List[str] | List[float]]] = {}
-        super().__init__(prepared_data)
 
-    def insert(self, prepared_data: PreparedData):
+    def __call__(self, prepared_data: PreparedData) -> PreparedData:
         grouped_train_data = prepared_data[Split.TRAIN]
         complete_train_data = grouped_train_data[MAX_GROUP_ID][InputTarget.INPUT]
 
@@ -90,7 +85,9 @@ class LinearRegressionInsertion(InsertionStrategy):
                 # Input predicted values
                 input_data.loc[:, self._missing_features_masks[gid]] = pred
 
+        return prepared_data
+
 MISSING_DATA_STRATEGIES = {
-    "mean": MeanInsertion,
-    "linear regression": LinearRegressionInsertion
+    "mean": MeanInsertion(),
+    "linear regression": LinearRegressionInsertion()
 }

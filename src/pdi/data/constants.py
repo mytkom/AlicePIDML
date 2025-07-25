@@ -29,6 +29,4 @@ NSIGMA_COLUMNS = [
 PROCESSED_DIR = "data/processed"
 SEED = 42
 TARGET_COLUMN = "fPdgCode"
-TEST_SIZE = 0.3
-TRAIN_SIZE = 0.55
 GROUP_ID_KEY = "group_id"

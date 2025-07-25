@@ -10,44 +10,40 @@ AttentionModel
     Attention-based model used for processing incomplete examples.
 """
 
-from ast import Tuple
-from typing import Optional
+from typing import List, Optional
 
 import torch
-from torch import dropout, nn
+from torch import nn
 from torch import Tensor
 from torch.nn.functional import one_hot
 from torch.autograd import Function
-from torch.nn.modules import activation
 
-from pdi.data.config import ModelConfig
+from pdi.config import ModelConfig
 from pdi.data.constants import N_COLUMNS
+from pdi.data.group_id_helpers import group_id_to_binary_array
 from pdi.data.types import GroupID
 
 ACTIVATIONS = {
     "ReLU": nn.ReLU
 }
 
-def build_model(cfg: ModelConfig, **add_cfg):
+def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     if cfg.architecture == "MLP":
         return NeuralNet(
-            layers=cfg.mlp.layers,
+            layers=[N_COLUMNS, *cfg.mlp.hidden_layers, 1],
             activation=ACTIVATIONS[cfg.mlp.activation],
             dropout=cfg.mlp.dropout,
         )
     elif cfg.architecture == "Ensemble":
-        if "group_ids" not in add_cfg.keys():
-            raise KeyError("group_ids named parameter must be specifier for Ensemble model!")
-
         return NeuralNetEnsemble(
-            group_ids=add_cfg["group_ids"],
+            group_ids=group_ids,
             hidden_layers=cfg.ensemble.hidden_layers,
             activation=ACTIVATIONS[cfg.ensemble.activation],
             dropout=cfg.ensemble.dropout,
         )
     elif cfg.architecture == "Attention":
         return AttentionModel(
-            in_dim=N_COLUMNS,
+            in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
             embed_hidden=cfg.attention.embed_hidden,
             embed_dim=cfg.attention.embed_dim,
             ff_hidden=cfg.attention.ff_hidden,
@@ -58,17 +54,15 @@ def build_model(cfg: ModelConfig, **add_cfg):
             dropout=cfg.attention.dropout
         )
     elif cfg.architecture == "AttentionDANN":
-        if "in_dim" not in add_cfg.keys():
-            raise KeyError("in_dim named parameter must be specifier for AttentionDANN model!")
-
         return AttentionModelDANN(
-            in_dim=add_cfg["in_dim"],
+            in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
             embed_hidden=cfg.attention_dann.attention.embed_hidden,
             embed_dim=cfg.attention_dann.attention.embed_dim,
             ff_hidden=cfg.attention_dann.attention.ff_hidden,
             pool_hidden=cfg.attention_dann.attention.pool_hidden,
             num_heads=cfg.attention_dann.attention.num_heads,
             num_blocks=cfg.attention_dann.attention.num_blocks,
+            dom_hidden_layers=cfg.attention_dann.dom_hidden_layers,
             activation=ACTIVATIONS[cfg.attention_dann.attention.activation],
             dropout=cfg.attention_dann.attention.dropout,
             alpha=cfg.attention_dann.alpha,
@@ -80,7 +74,7 @@ class NeuralNet(nn.Module):
     """NeuralNet is a basic neural network with variable layer dimensions, activation function and optional dropout."""
 
     def __init__(
-        self, layers: list[int], activation: nn.Module, dropout: Optional[float] = None
+        self, layers: list[int], activation: type[nn.Module], dropout: Optional[float] = None
     ):
         """__init__
 
@@ -113,7 +107,7 @@ class NeuralNetEnsemble(nn.Module):
         self,
         group_ids: list[GroupID],
         hidden_layers: list[int],
-        activation: nn.Module = nn.ReLU,
+        activation: type[nn.Module] = nn.ReLU,
         dropout: float = 0.4,
     ):
         """__init__
@@ -133,13 +127,22 @@ class NeuralNetEnsemble(nn.Module):
         self.models = nn.ModuleDict(
             {
                 str(g_id): NeuralNet(
-                    [bin(g_id).count("1")] + hidden_layers, activation, dropout
+                    [bin(g_id).count("1")] + hidden_layers + [1], activation, dropout
                 )
                 for g_id in group_ids
             }
         )
 
-    def forward(self, x: Tensor, group_id: GroupID):
+        # caching tuple -> group_id to save few transformations during inference
+        self.group_id_map = {
+            tuple(tuple([bool(b) for b in group_id_to_binary_array(g_id)])): str(g_id)
+            for g_id in group_ids
+        }
+
+    def forward(self, x: Tensor):
+        nan_mask = torch.isnan(x[0])
+        group_id = self.group_id_map[tuple((~nan_mask).tolist())]
+        x = x[:, ~nan_mask]
         return self.models[str(group_id)](x)
 
 
@@ -147,7 +150,6 @@ class AttentionModel(nn.Module):
     """AttentionModel is an attention-based model used for processing incomplete examples."""
 
     class _AttentionPooling(nn.Module):
-
         def __init__(self, in_dim, pool_dim, activation):
             super().__init__()
             self.net = NeuralNet([in_dim, pool_dim, in_dim], activation)
@@ -193,7 +195,7 @@ class AttentionModel(nn.Module):
         pool_hidden: int,
         num_heads: int,
         num_blocks: int,
-        activation: nn.Module = nn.ReLU,
+        activation: type[nn.Module] = nn.ReLU,
         dropout: float = 0.4,
     ):
         """__init__
@@ -247,7 +249,7 @@ class ReverseLayerF(Function):
         output = grad_output.neg() * ctx.alpha
 
         return output, None
-    
+
 class AttentionModelDANN(AttentionModel):
     """AttentionModelDANN is an attention-based model with Domain Adversarial Neural Network (DANN) capabilities."""
 
@@ -260,7 +262,8 @@ class AttentionModelDANN(AttentionModel):
         pool_hidden: int,
         num_heads: int,
         num_blocks: int,
-        activation: nn.Module = nn.ReLU,
+        dom_hidden_layers: List[int],
+        activation: type[nn.Module] = nn.ReLU,
         dropout: float = 0.4,
         alpha: float = 1.0,
     ):
@@ -268,10 +271,10 @@ class AttentionModelDANN(AttentionModel):
             in_dim, embed_hidden, embed_dim, ff_hidden, pool_hidden, num_heads, num_blocks, activation, dropout
         )
         # TODO: should I use different architecture for the domain classifier? I should do sweeps to find out.
-        self.domain_classifier = NeuralNet([embed_dim, pool_hidden, 1], activation)
+        self.domain_classifier = NeuralNet([embed_dim, *dom_hidden_layers, 1], activation)
         self.alpha = alpha
-    
-    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+
+    def forward(self, x: Tensor) -> Tensor:
         # Feature extraction part
         feature = self.to_feature_set(x)
         feature = self.emb(feature)
@@ -286,7 +289,4 @@ class AttentionModelDANN(AttentionModel):
         # Classifier part
         class_posterior = self.net(feature)
 
-        return class_posterior, domain_posterior
-
-class Traditional:
-    pass
+        return torch.cat((class_posterior, domain_posterior), dim=1)

@@ -34,3 +34,6 @@ def group_id_to_detectors_available(group_id: GroupID) -> list[Detector]:
             detectors.remove(COLUMN_DETECTOR[col])
     return detectors
 
+def group_id_to_missing_columns(group_id: GroupID) -> NDArray:
+    return filter_strings_by_binary(int(group_id), np.array(COLUMNS_FOR_TRAINING), '0')
+

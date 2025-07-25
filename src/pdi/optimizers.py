@@ -1,6 +1,6 @@
 from torch import nn
 from torch.optim import SGD, AdamW
-from pdi.data.config import TrainingConfig
+from pdi.config import TrainingConfig
 
 def build_optimizer(cfg: TrainingConfig, model: nn.Module):
     if cfg.optimizer == "AdamW":

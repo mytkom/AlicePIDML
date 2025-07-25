@@ -14,7 +14,5 @@ PARTICLES_DICT = {
     -2212: "antiproton",
 }
 
+# Only target codes (particle species' PDG codes) of our interes
 TARGET_CODES = [211, 2212, 321, -211, -2212, -321]
-P_RANGE = [0, 5]
-P_RESOLUTION = 20
-NUM_WORKERS = 3
