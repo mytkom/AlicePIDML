@@ -9,6 +9,7 @@ from tqdm import tqdm
 import wandb
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, GeneralDataPreparation, MCBatchItemOut
+from pdi.data.types import GroupID
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.losses import build_loss
