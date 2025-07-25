@@ -129,7 +129,6 @@ class CombinedDataLoader(Generic[InT, OutT]):
     def _reset_seed(self):
         self.rng = Random(self.seed)
 
-    # TODO: test undersampling implementation (it was not tested)
     def __iter__(self) -> Iterator[OutT]:
         if not self.shuffle:
             self._reset_seed()

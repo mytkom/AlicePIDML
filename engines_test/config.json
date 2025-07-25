@@ -17,10 +17,10 @@
             }
         },
         "lr_scheduler": "Exponential",
-        "device": "cpu",
+        "device": "cuda",
         "loss": "cross entropy",
         "steps_to_log": 50,
-        "batch_size": 32,
+        "batch_size": 512,
         "max_epochs": 50,
         "early_stopping_epoch_count": 5,
         "early_stopping_progress_threshold": 0.001,

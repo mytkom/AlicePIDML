@@ -9,8 +9,6 @@ from tqdm import tqdm
 import wandb
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, GeneralDataPreparation, MCBatchItemOut
-from pdi.data.group_id_helpers import group_id_to_binary_array, group_id_to_missing_columns
-from pdi.data.types import GroupID, InputTarget, Split
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.losses import build_loss
@@ -49,11 +47,12 @@ class DomainAdaptationEngine(BaseEngine):
         if wandb.run is None:
             wandb.init(config=self._cfg.to_dict())
         model = build_model(self._cfg.model, group_ids=self._sim_data_prep.get_group_ids())
+        model.to(self._cfg.training.device)
 
         pos_weight = None
         # TODO: check if it works as expected, compare results with it and without
         if self._cfg.data.weight_particles_species:
-            pos_weight = torch.tensor(self._sim_data_prep.pos_weight(target_code))
+            pos_weight = torch.tensor(self._sim_data_prep.pos_weight(target_code)).to(self._cfg.training.device)
         loss_func_class: _Loss = build_loss(self._cfg.training, pos_weight=pos_weight)
         loss_func_domain: _Loss = build_loss(self._cfg.training)
 

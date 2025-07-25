@@ -4,7 +4,6 @@ import dataclasses
 from typing import List, Literal, Optional
 
 from dataclass_wizard import JSONPyWizard
-from sklearn._loss.link import dataclass
 
 # TODO: describe those methods here and fill config fields
 @dataclasses.dataclass

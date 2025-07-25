@@ -1,7 +1,6 @@
 from typing import cast
 from joblib.pool import np
 from numpy.typing import NDArray
-from torch.functional import Tensor
 import torch
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -45,11 +44,12 @@ class ClassicEngine(BaseEngine):
         if wandb.run is None:
             wandb.init(config=self._cfg.to_dict())
         model = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
+        model.to(self._cfg.training.device)
 
         pos_weight = None
         # TODO: check if it works as expected, compare results with it and without
         if self._cfg.data.weight_particles_species:
-            pos_weight = torch.tensor(self._data_prep.pos_weight(target_code))
+            pos_weight = torch.tensor(self._data_prep.pos_weight(target_code)).to(self._cfg.training.device)
         loss: _Loss = build_loss(self._cfg.training, pos_weight=pos_weight)
 
         optimizer = build_optimizer(self._cfg.training, model)
@@ -79,7 +79,7 @@ class ClassicEngine(BaseEngine):
 
             # Threshold for posterior probability to identify as positive
             # it is optimized for f1 metric
-            model.thres = torch.Tensor(np.array(val_metrics["optimal_threshold"]))
+            model.thres = torch.tensor(np.array(val_metrics["optimal_threshold"])).to(self._cfg.training.device)
 
             val_loss = val_metrics["loss"]
 
