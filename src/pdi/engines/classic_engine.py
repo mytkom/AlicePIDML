@@ -229,7 +229,7 @@ class ClassicEngine(BaseEngine):
             #     unstandardized_data[k].extend(v.cpu().detach().numpy())
 
             del input_data
-            del binary_data
+            del binary_target
             del target
             del gid
             del data_dict
