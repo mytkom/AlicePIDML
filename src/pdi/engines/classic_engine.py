@@ -223,10 +223,10 @@ class ClassicEngine(BaseEngine):
             predictions.extend(predict_target.cpu().detach().numpy())
             targets.extend(target.cpu().detach().numpy())
             input_data_tensors.extend(input_data.cpu().detach().numpy())
-            for k, v in data_dict.items():
-                if k not in unstandardized_data:
-                    unstandardized_data[k] = []
-                unstandardized_data[k].extend(v.cpu().detach().numpy())
+            # for k, v in data_dict.items():
+            #     if k not in unstandardized_data:
+            #         unstandardized_data[k] = []
+            #     unstandardized_data[k].extend(v.cpu().detach().numpy())
 
 
 
@@ -240,7 +240,7 @@ class ClassicEngine(BaseEngine):
             "inputs": np.array(input_data_tensors).squeeze(),
             "targets": np.array(targets, dtype=np.float32).squeeze(),
             "predictions": np.array(predictions).squeeze(),
-            **{k: np.array(v).squeeze() for k, v in unstandardized_data.items()}
+            # **{k: np.array(v).squeeze() for k, v in unstandardized_data.items()}
         }
         val_loss = val_loss / count
 
