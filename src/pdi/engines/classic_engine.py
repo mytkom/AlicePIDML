@@ -208,13 +208,6 @@ class ClassicEngine(BaseEngine):
 
         model.eval()
         for input_data, target, gid, data_dict in tqdm(dataloader):
-            targets.extend(target.numpy())
-            input_data_tensors.extend(input_data.numpy())
-            for k, v in data_dict.items():
-                if k not in unstandardized_data:
-                    unstandardized_data[k] = []
-                unstandardized_data[k].extend(v.numpy())
-
             input_data = input_data.to(self._cfg.training.device)
 
             out = model(input_data)
@@ -228,6 +221,13 @@ class ClassicEngine(BaseEngine):
             # save data
             predict_target = torch.sigmoid(out)
             predictions.extend(predict_target.cpu().detach().numpy())
+            targets.extend(target.cpu().detach().numpy())
+            input_data_tensors.extend(input_data.cpu().detach().numpy())
+            for k, v in data_dict.items():
+                if k not in unstandardized_data:
+                    unstandardized_data[k] = []
+                unstandardized_data[k].extend(v.cpu().detach().numpy())
+
 
 
         if count == 0:
