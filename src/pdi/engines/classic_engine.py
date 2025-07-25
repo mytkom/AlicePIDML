@@ -13,7 +13,7 @@ from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
 from pdi.losses import build_loss
-from pdi.models import NeuralNetEnsemble, build_model
+from pdi.models import build_model
 from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
@@ -223,10 +223,10 @@ class ClassicEngine(BaseEngine):
             predictions.extend(predict_target.cpu().detach().numpy())
             targets.extend(target.cpu().detach().numpy())
             input_data_tensors.extend(input_data.cpu().detach().numpy())
-            # for k, v in data_dict.items():
-            #     if k not in unstandardized_data:
-            #         unstandardized_data[k] = []
-            #     unstandardized_data[k].extend(v.cpu().detach().numpy())
+            for k, v in data_dict.items():
+                if k not in unstandardized_data:
+                    unstandardized_data[k] = []
+                unstandardized_data[k].extend(v.cpu().detach().numpy())
 
             del input_data
             del binary_target

@@ -309,11 +309,6 @@ class GeneralDataPreparation:
         #   split ratios are specified in DataConfig self._cfg
         test_train_split: dict[Split, pd.DataFrame] = self._test_train_split(data)
 
-        # Undersample (anti)pions to the next majority group in the training split
-        # for simulated data.
-        if self._cfg.undersample_pions and not self._is_experimental:
-            test_train_split[Split.TRAIN] = self._undersample_pions(test_train_split[Split.TRAIN])
-
         # Standardization parameters (mean, std) based on train split
         #   results are saved in self._scaling_params
         self._calc_scaling_params(test_train_split[Split.TRAIN])
@@ -329,6 +324,11 @@ class GeneralDataPreparation:
             for gid, group_data in grouped_split_data_dict.items():
                 gid: GroupID
                 group_data: pd.DataFrame
+
+                # Undersample (anti)pions to the next majority group in the training split
+                # for simulated data.
+                if split == Split.TRAIN and self._cfg.undersample_pions and not self._is_experimental:
+                    group_data = self._undersample_pions(group_data)
 
                 # Split data into ML inputs and targets and additional unstandardized dict with nSigma columns if available
                 self._prepared_data[split][gid] = self._input_target_unstandardized_split(group_data)

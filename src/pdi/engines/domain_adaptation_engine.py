@@ -171,7 +171,7 @@ class DomainAdaptationEngine(BaseEngine):
         for i in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
             sim_inputs, sim_targets, sim_gids, sim_unstandardized = next(sim_iter)
             sim_gid: GroupID = cast(GroupID, sim_gids[0])
-            exp_inputs, exp_gids, exp_unstandardized = next(iter(exp_iter))
+            exp_inputs, exp_gids, exp_unstandardized = next(exp_iter)
             exp_gid: GroupID = cast(GroupID, exp_gids[0])
 
             sim_inputs = sim_inputs.to(self._cfg.training.device)
@@ -272,31 +272,31 @@ class DomainAdaptationEngine(BaseEngine):
             sim_inputs, sim_targets, sim_gids, sim_unstandardized = next(sim_iter)
             sim_gid: GroupID = cast(GroupID, sim_gids[0])
 
-            class_results["targets"].extend(sim_targets.numpy())
-            class_results["inputs"].extend(sim_inputs.numpy())
-            class_results["gids"].extend(sim_gids.numpy())
+            class_results["targets"].extend(sim_targets.cpu().detach().numpy())
+            class_results["inputs"].extend(sim_inputs.cpu().detach().numpy())
+            class_results["gids"].extend(sim_gids.cpu().detach().numpy())
             for k, v in sim_unstandardized.items():
                 if k not in class_results["unstandardized"]:
                     class_results["unstandardized"][k] = []
-                class_results["unstandardized"][k].extend(v.numpy())
+                class_results["unstandardized"][k].extend(v.cpu().detach().numpy())
 
-            exp_inputs, exp_gids, exp_unstandardized = next(iter(exp_iter))
+            exp_inputs, exp_gids, exp_unstandardized = next(exp_iter)
             exp_gid: GroupID = cast(GroupID, exp_gids[0])
 
-            domain_results["inputs"].extend(sim_inputs.numpy())
-            domain_results["inputs"].extend(exp_inputs.numpy())
+            domain_results["inputs"].extend(sim_inputs.cpu().detach().numpy())
+            domain_results["inputs"].extend(exp_inputs.cpu().detach().numpy())
 
-            domain_results["gids"].extend(sim_gids.numpy())
-            domain_results["gids"].extend(exp_gids.numpy())
+            domain_results["gids"].extend(sim_gids.cpu().detach().numpy())
+            domain_results["gids"].extend(exp_gids.cpu().detach().numpy())
 
             for k, v in sim_unstandardized.items():
                 if k not in domain_results["unstandardized"]:
                     domain_results["unstandardized"][k] = []
-                domain_results["unstandardized"][k].extend(v.numpy())
+                domain_results["unstandardized"][k].extend(v.cpu().detach().numpy())
             for k, v in exp_unstandardized.items():
                 if k not in domain_results["unstandardized"]:
                     domain_results["unstandardized"][k] = []
-                domain_results["unstandardized"][k].extend(v.numpy())
+                domain_results["unstandardized"][k].extend(v.cpu().detach().numpy())
 
             sim_inputs = sim_inputs.to(self._cfg.training.device)
             exp_inputs = exp_inputs.to(self._cfg.training.device)
@@ -329,6 +329,15 @@ class DomainAdaptationEngine(BaseEngine):
             domain_targets = torch.cat((torch.zeros_like(sim_domain_out), torch.ones_like(exp_domain_out)), dim=0)
             domain_results["targets"].extend(domain_targets.cpu().detach().numpy())
             domain_results["predictions"].extend(predict_domain.cpu().detach().numpy())
+
+            del exp_out
+            del sim_inputs
+            del sim_targets
+            del sim_gids
+            del sim_unstandardized
+            del exp_inputs
+            del exp_gids
+            del exp_unstandardized
 
         if count == 0:
             count = 1
