@@ -207,7 +207,7 @@ class ClassicEngine(BaseEngine):
         count = 0
 
         model.eval()
-        for input_data, target, gid, data_dict in tqdm(dataloader):
+        for i, (input_data, target, gid, data_dict) in enumerate(tqdm(dataloader)):
             input_data = input_data.to(self._cfg.training.device)
 
             out = model(input_data)
@@ -228,7 +228,11 @@ class ClassicEngine(BaseEngine):
             #         unstandardized_data[k] = []
             #     unstandardized_data[k].extend(v.cpu().detach().numpy())
 
-
+            del input_data
+            del binary_data
+            del target
+            del gid
+            del data_dict
 
         if count == 0:
             count = 1

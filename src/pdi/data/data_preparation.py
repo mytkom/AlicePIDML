@@ -396,6 +396,7 @@ class GeneralDataPreparation:
                     batch_size=batch_size,
                     shuffle=(split == Split.TRAIN),
                     num_workers=num_workers,
+                    pin_memory=True,
                     )
                     for dataset in datasets.values()
                 ],
