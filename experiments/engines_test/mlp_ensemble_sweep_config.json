@@ -1,7 +1,7 @@
 {
   "method": "grid",
   "metric": {
-    "name": "val_f1",
+    "name": "val/f1_best",
     "goal": "maximize"
   },
   "parameters": {
@@ -11,10 +11,8 @@
           "parameters": {
             "architecture": {
               "values": [
-                "MLP",
-                "Ensemble",
-                "Attention",
-                "AttentionDANN"
+                "mlp",
+                "ensemble"
               ]
             }
           }

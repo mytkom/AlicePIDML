@@ -1,0 +1,30 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "model": {
+          "parameters": {
+            "architecture": {
+              "values": [
+                "attention",
+                "attention_dann"
+              ]
+            }
+          }
+        },
+        "data": {
+          "parameters": {
+            "undersample_pions": {
+              "values": [true, false]
+            }
+          }
+        }
+      }
+    }
+  }
+}

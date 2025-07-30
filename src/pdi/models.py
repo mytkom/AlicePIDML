@@ -28,20 +28,20 @@ ACTIVATIONS = {
 }
 
 def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
-    if cfg.architecture == "MLP":
+    if cfg.architecture == "mlp":
         return NeuralNet(
             layers=[N_COLUMNS, *cfg.mlp.hidden_layers, 1],
             activation=ACTIVATIONS[cfg.mlp.activation],
             dropout=cfg.mlp.dropout,
         )
-    elif cfg.architecture == "Ensemble":
+    elif cfg.architecture == "ensemble":
         return NeuralNetEnsemble(
             group_ids=group_ids,
             hidden_layers=cfg.ensemble.hidden_layers,
             activation=ACTIVATIONS[cfg.ensemble.activation],
             dropout=cfg.ensemble.dropout,
         )
-    elif cfg.architecture == "Attention":
+    elif cfg.architecture == "attention":
         return AttentionModel(
             in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
             embed_hidden=cfg.attention.embed_hidden,
@@ -53,7 +53,7 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             activation=ACTIVATIONS[cfg.attention.activation],
             dropout=cfg.attention.dropout
         )
-    elif cfg.architecture == "AttentionDANN":
+    elif cfg.architecture == "attention_dann":
         return AttentionModelDANN(
             in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
             embed_hidden=cfg.attention_dann.attention.embed_hidden,

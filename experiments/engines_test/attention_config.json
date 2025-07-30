@@ -10,22 +10,23 @@
                 "nesterov": true
             }
         },
-        "optimizer": "AdamW",
+        "optimizer": "adamw",
         "lr_schedulers": {
             "exponential": {
                 "gamma": 0.9
             }
         },
-        "lr_scheduler": "Exponential",
-        "device": "cuda",
+        "lr_scheduler": "exponential",
+        "device": "cpu",
         "loss": "cross entropy",
         "steps_to_log": 50,
         "batch_size": 512,
-        "max_epochs": 50,
+        "max_epochs": 1,
+        "weight_particles_species": false,
         "early_stopping_epoch_count": 5,
         "early_stopping_progress_threshold": 0.001,
         "num_workers": 4,
-        "start_lr": 0.003
+        "start_lr": 0.0002
     },
     "data": {
         "outlier_filtering_methods": {
@@ -34,17 +35,14 @@
             "iqr": {}
         },
         "outlier_filtering_method": null,
-        "train_size": 0.55,
+        "train_size": 0.56,
         "test_size": 0.2,
         "undersample_missing_detectors": true,
         "undersample_pions": true,
-        "weight_particles_species": false,
         "is_run_3": true,
-        "complete_only": false,
-        "split_seed": 0
     },
     "model": {
-        "architecture": "MLP",
+        "architecture": "attention",
         "mlp": {
             "hidden_layers": [
                 64,
@@ -95,9 +93,9 @@
         }
     },
     "sweep": {
-      "config": "/home/mytkom/Documents/alice/pdi_temp/pdi/engines_test/sweep_config.json",
-      "name": "Architecture test sweep",
-      "project_name": "Architecture sweeps"
+      "config": "engines_test/attention_sweep_config.json",
+      "name": "Engine test",
+      "project_name": "Engine tests"
     },
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
     "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],

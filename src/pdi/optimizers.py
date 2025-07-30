@@ -3,14 +3,14 @@ from torch.optim import SGD, AdamW
 from pdi.config import TrainingConfig
 
 def build_optimizer(cfg: TrainingConfig, model: nn.Module):
-    if cfg.optimizer == "AdamW":
+    if cfg.optimizer == "adamw":
         # TODO: consider more parameters for AdamW
         return AdamW(
             model.parameters(),
             lr=cfg.start_lr,
             weight_decay=cfg.optimizers.adamw.weight_decay,
         )
-    elif cfg.optimizer == "SGD":
+    elif cfg.optimizer == "sgd":
         return SGD(
             model.parameters(),
             lr=cfg.start_lr,

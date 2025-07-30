@@ -1,0 +1,64 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "model": {
+          "parameters": {
+            "mlp": {
+              "parameters": {
+                "hidden_layers": {
+                  "values": [
+                    [64,32,16],
+                    [128,64,32,16],
+                    [128,256,256,128,64]
+                  ]
+                },
+                "dropout": {
+                  "values": [
+                    0.5,
+                    0.9
+                  ]
+                },
+                "missing_data_strategy": {
+                  "values": [
+                    "mean",
+                    "linear regression"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "data": {
+          "parameters": {
+            "undersample_pions": {
+              "values": [true, false]
+            },
+            "undersample_missing_detectors": {
+              "values": [true, false]
+            }
+          }
+        },
+        "training": {
+          "parameters": {
+            "start_lr": {
+              "values": [
+                0.001,
+                0.0003,
+                0.0001
+              ]
+            },
+            "lr_scheduler": {
+              "values": [null, "exponential", "polynomial"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

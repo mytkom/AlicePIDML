@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from torch import Tensor, rand
 from torch.utils.data import DataLoader, Dataset
 
-from pdi.constants import PARTICLES_DICT
+from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.data.group_id_helpers import binary_array_to_group_id
 from pdi.data.constants import (
     PROCESSED_DIR,
@@ -255,7 +255,7 @@ class GeneralDataPreparation:
         "fTRDSignal": 0
     }
 
-    def __init__(self, config: DataConfig, input_paths: List[str], base_dir = PROCESSED_DIR) -> None:
+    def __init__(self, config: DataConfig, input_paths: List[str], seed: int, base_dir = PROCESSED_DIR) -> None:
         if len(input_paths) == 0:
             raise KeyError("You must specify at least one input_path with data!")
 
@@ -265,8 +265,9 @@ class GeneralDataPreparation:
         self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
         self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
-        self._input_paths: List[str] = input_paths
         self._cfg: DataConfig = config
+        self._input_paths: List[str] = input_paths
+        self._seed = seed
         self._columns_for_training: List[str] = []
         self._columns_to_standardize: List[str] = self.COLUMNS_TO_SCALE_RUN_3 if config.is_run_3 else self.COLUMNS_TO_SCALE_RUN_2
         self._prepared_data: dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]] = {}
@@ -532,7 +533,7 @@ class GeneralDataPreparation:
         (data_not_test, test_data) = train_test_split(
             data,
             test_size=self._cfg.test_size,
-            random_state=self._cfg.split_seed,
+            random_state=self._seed,
             stratify=None if self._is_experimental else data.loc[:, [TARGET_COLUMN]],
         )
         data_not_test = pd.DataFrame(data_not_test)
@@ -540,7 +541,7 @@ class GeneralDataPreparation:
         (train_data, val_data) = train_test_split(
             data_not_test,
             train_size=train_to_val_ratio,
-            random_state=self._cfg.split_seed,
+            random_state=self._seed,
             stratify=None if self._is_experimental else data_not_test.loc[:, [TARGET_COLUMN]],
         )
 
@@ -563,7 +564,7 @@ class GeneralDataPreparation:
         Returns:
             pd.DataFrame: DataFrame with undersampled pions and anti-pions.
         """
-        rng = Random(self._cfg.split_seed)  # Seed for reproducibility
+        rng = Random(self._seed)  # Seed for reproducibility
 
         # Group data by the target column
         groups = data.groupby(TARGET_COLUMN, dropna=False)

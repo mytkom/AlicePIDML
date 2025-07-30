@@ -1,32 +1,4 @@
 {
-    "training": {
-        "optimizers": {
-            "adamw": {
-                "weight_decay": 0.0
-            },
-            "sgd": {
-                "momentum": 0.9,
-                "weight_decay": 0.0,
-                "nesterov": true
-            }
-        },
-        "optimizer": "AdamW",
-        "lr_schedulers": {
-            "exponential": {
-                "gamma": 0.9
-            }
-        },
-        "lr_scheduler": "Exponential",
-        "device": "cpu",
-        "loss": "cross entropy",
-        "steps_to_log": 50,
-        "batch_size": 32,
-        "max_epochs": 50,
-        "early_stopping_epoch_count": 5,
-        "early_stopping_progress_threshold": 0.001,
-        "num_workers": 4,
-        "start_lr": 0.003
-    },
     "data": {
         "outlier_filtering_methods": {
             "ocsvm": {},
@@ -34,17 +6,14 @@
             "iqr": {}
         },
         "outlier_filtering_method": null,
-        "train_size": 0.55,
+        "train_size": 0.56,
         "test_size": 0.2,
         "undersample_missing_detectors": true,
         "undersample_pions": true,
-        "weight_particles_species": false,
-        "is_run_3": true,
-        "complete_only": false,
-        "split_seed": 0
+        "is_run_3": true
     },
     "model": {
-        "architecture": "Ensemble",
+        "architecture": "mlp",
         "mlp": {
             "hidden_layers": [
                 64,
@@ -76,7 +45,7 @@
             "dropout": 0.4
         },
         "attention_dann": {
-            "dom_layers": [
+            "dom_hidden_layers": [
                 64,
                 32,
                 16
@@ -92,13 +61,59 @@
                 "dropout": 0.4
             },
             "alpha": 2.0
-        }
+        },
+        "pretrained_model_dirpath": null
+    },
+    "sweep": {
+        "config": "experiments/mlp_hyperparameters_sweep/sweep_config.json",
+        "name": "MLP wide hyperparameter tuning",
+        "project_name": "Hyperparameter tuning"
+    },
+    "training": {
+        "optimizers": {
+            "adamw": {
+                "weight_decay": 0.0
+            },
+            "sgd": {
+                "momentum": 0.9,
+                "weight_decay": 0.0,
+                "nesterov": true
+            }
+        },
+        "optimizer": "adamw",
+        "lr_schedulers": {
+            "exponential": {
+                "gamma": 0.9
+            },
+            "cosine_restarts": {
+                "first_cycle_epochs": 20,
+                "cycle_epoch_inc": 5
+            },
+            "polynomial": {
+                "power": 1.0
+            },
+            "constant": {
+                "factor": 1.0,
+                "total_iters": 50
+            }
+        },
+        "lr_scheduler": "exponential",
+        "loss": "cross entropy",
+        "start_lr": 0.003,
+        "device": "cuda",
+        "steps_to_log": 50,
+        "batch_size": 512,
+        "max_epochs": 10,
+        "early_stopping_epoch_count": 2,
+        "early_stopping_progress_threshold": 0.001,
+        "num_workers": 4,
+        "weight_particles_species": false
     },
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
-    "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
-    "project_dir": "project",
+    "exp_dataset_paths": [],
+    "project_dir": "mlp_hyperparameter_tuning",
     "log_dir": "logs",
     "mixed_precision": "no",
     "seed": 0,
-    "config": null
+    "config_path": null
 }

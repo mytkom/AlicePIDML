@@ -14,7 +14,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-from pdi.constants import PARTICLES_DICT
+from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.data.constants import TARGET_COLUMN
 from pdi.data.detector_helpers import detector_unmask
 from pdi.data.types import Additional, InputTarget, Split
@@ -43,7 +43,7 @@ def plot_particle_distribution(
             detectors_label = ",".join(detectors)
             plt.plot(bins[:-1], counts)
             labels.append(f"Available detectors: {detectors_label}")
-        plt.title(f"Distribution of {PARTICLES_DICT[target_code]}")
+        plt.title(f"Distribution of {TARGET_CODE_TO_PART_NAME[target_code]}")
         plt.xlabel(x_axis)
         plt.ylabel("Count")
         plt.legend(labels, loc="upper right")

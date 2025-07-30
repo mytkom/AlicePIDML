@@ -39,7 +39,7 @@ class DataConfig:
     outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation forest"] = None
 
     # Train/Validation/Test dataset split ratios. Validation is calculated automatically 1 - train_size - test_size
-    train_size: float = 0.55
+    train_size: float = 0.56
     test_size: float = 0.2
 
     # If to undersample observations by missing detectors groups on the DataLoader stage.
@@ -50,20 +50,8 @@ class DataConfig:
     # TODO: description
     undersample_pions: bool = True
 
-    # If to undersample observations by particle types, e.g. if training model for proton classification,
-    # ~ 3% od data is proton observations, and 97% of data is not proton observations, if this option is set
-    # to true, loss function will be weighted accordingly to this ratio
-    weight_particles_species: bool = False
-
     # Is it data from ALICE Run 3? Different missing values of signals are dependant of this setting.
     is_run_3: bool = True
-
-    # If set to True, observations with at least one missing value (e.g. TOFBeta) are filtered out
-    # Unrealistic (only ~ 4% of data is complete), but can be context for physicists, who use only complete data in their analyses
-    complete_only: bool = False
-
-    # Pseudorandom number generator seed used during splitting dataset into train/validation/test
-    split_seed: int = 0
 
 @dataclasses.dataclass
 class AdamWConfig:
@@ -88,24 +76,47 @@ class ExponentialLRConfig:
     gamma: float = 0.9
 
 @dataclasses.dataclass
+class CosineRestartsLRConfig:
+    # Number of epochs of the first cycle
+    first_cycle_epochs: int = 20
+
+    # Number of epochs to be increased for every new cycle to the last value
+    cycle_epoch_inc: int = 5
+
+@dataclasses.dataclass
+class PolynomialLRConfig:
+    power: float = 1.0
+
+@dataclasses.dataclass
+class ConstantLRConfig:
+    factor: float = 1.0
+    total_iters: int = 50
+
+@dataclasses.dataclass
 class LRSchedulersConfig:
     exponential: ExponentialLRConfig = dataclasses.field(default_factory=ExponentialLRConfig)
+    cosine_restarts: CosineRestartsLRConfig = dataclasses.field(default_factory=CosineRestartsLRConfig)
+    polynomial: PolynomialLRConfig = dataclasses.field(default_factory=PolynomialLRConfig)
+    constant: ConstantLRConfig = dataclasses.field(default_factory=ConstantLRConfig)
 
 @dataclasses.dataclass
 class TrainingConfig:
     # Choose optimizer
     optimizers: OptimizersConfig = dataclasses.field(default_factory=OptimizersConfig)
-    optimizer: Literal["AdamW", "SGD"] = "AdamW"
+    optimizer: Literal["adamw", "sgd"] = "adamw"
 
     # Choose learning rate scheduler
     lr_schedulers: LRSchedulersConfig = dataclasses.field(default_factory=LRSchedulersConfig)
-    lr_scheduler: Literal["Exponential"] = "Exponential"
-
-    # Choose device for training (cuda is Nvidia GPU)
-    device: Literal["cuda", "cpu"] = "cuda"
+    lr_scheduler: Literal["exponential", "cosine_restarts", "polynomial", "constant"] | None = "exponential"
 
     # Loss (risk) function to be minimized
     loss: Literal["cross entropy"] = "cross entropy"
+
+    # Choose start learning rate
+    start_lr: float = 0.003
+
+    # Choose device for training (cuda is Nvidia GPU)
+    device: Literal["cuda", "cpu"] = "cuda"
 
     # How many training steps needs to be done before logging results
     steps_to_log: int = 50
@@ -113,7 +124,7 @@ class TrainingConfig:
     # Batch size of observations, update of model weights will be done after full batch.
     # Bigger batch size makes direction of optimization descent more stable.
     # Bigger batch size utilizes GPU more.
-    batch_size: int = 32
+    batch_size: int = 512
 
     # If early stopping criterion would not be met, then max_epochs of training will be done
     max_epochs: int = 50
@@ -129,8 +140,11 @@ class TrainingConfig:
     # and RAM utilization.
     num_workers: int = 4
 
-    # Choose start learning rate
-    start_lr: float = 0.003
+    # If to undersample observations by particle types, e.g. if training model for proton classification,
+    # ~ 3% od data is proton observations, and 97% of data is not proton observations, if this option is set
+    # to true, loss function will be weighted accordingly to this ratio
+    weight_particles_species: bool = False
+
 
 def mlp_default_hidden_layers():
     return [64, 32, 16]
@@ -207,15 +221,20 @@ class AttentionDANNConfig:
 @dataclasses.dataclass
 class ModelConfig:
     # Choose architecture of Deep Neural Network to use
-    # - MLP: single multi-layer perceptron, which cannot handle missing data --- it needs to be filled (e.g. by mean)
-    # - Ensemble: ensemble of MLPs, one for each missing detector combination (4 combinations)
-    # - Attention: attention-based neural network, it can handle missing data by one-hot encoding of input
-    # - AttentionDANN: attention-based neural network with domain adversarial neural network approach (domain classifier added)
-    architecture: Literal["MLP", "Ensemble", "Attention", "AttentionDANN"] = "Attention"
+    # - mlp: single multi-layer perceptron, which cannot handle missing data --- it needs to be filled (e.g. by mean)
+    # - ensemble: ensemble of MLPs, one for each missing detector combination (4 combinations)
+    # - attention: attention-based neural network, it can handle missing data by one-hot encoding of input
+    # - attention_dann: attention-based neural network with domain adversarial neural network approach (domain classifier added)
+    architecture: Literal["mlp", "ensemble", "attention", "attention_dann"] = "attention"
     mlp: MLPConfig = dataclasses.field(default_factory=MLPConfig)
     ensemble: EnsembleConfig = dataclasses.field(default_factory=EnsembleConfig)
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
     attention_dann: AttentionDANNConfig = dataclasses.field(default_factory=AttentionDANNConfig)
+
+    # If you want to start training from some checkpoint, you can pass the path to the
+    # directory with best.pt weights and metadata.json files of the model. Make sure to
+    # set correct architecture for your weights.
+    pretrained_model_dirpath: Optional[str] = None
 
 @dataclasses.dataclass
 class SweepConfig:
@@ -230,15 +249,14 @@ class SweepConfig:
 
 @dataclasses.dataclass
 class Config(JSONPyWizard):
-    # training process related
-    training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)
-
     # data preprocessing, loading and balancing methods
     data: DataConfig = dataclasses.field(default_factory=DataConfig)
 
     model: ModelConfig = dataclasses.field(default_factory=ModelConfig)
 
     sweep: SweepConfig = dataclasses.field(default_factory=SweepConfig)
+
+    training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)
 
     # Paths to simulated datasets obtained using O2Physics's PIDMLProducer with ML option enabled
     sim_dataset_paths: List[str] = dataclasses.field(default_factory=list)
@@ -252,4 +270,25 @@ class Config(JSONPyWizard):
     # TODO: check if can be easily adopted, it can give us performance boost
     mixed_precision: str = "no"
     seed: int = 0
+    config_path: Optional[str] = None
+
+@dataclasses.dataclass
+class OneParticleConfig:
     config: Optional[str] = None
+    particle: Literal["pion", "kaon", "proton", "antipion", "antikaon", "antiproton"] = "pion"
+
+@dataclasses.dataclass
+class AllParticlesConfig:
+    # Default config loaded, when no particle specific config is provided.
+    # It can be used for example to test all particle species training on single config
+    # or to do so with most of the species, but overwrite e.g. pions.
+    all: Optional[str] = None
+
+    pion: Optional[str] = None
+    kaon: Optional[str] = None
+    proton: Optional[str] = None
+    antipion: Optional[str] = None
+    antikaon: Optional[str] = None
+    antiproton: Optional[str] = None
+
+
