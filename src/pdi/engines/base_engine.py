@@ -73,15 +73,14 @@ class BaseEngine:
     # returns if progress was made
     def _early_stopping_step(self, model: nn.Module, threshold: float, epoch: int, val_loss: float, min_loss: float, val_f1: float) -> bool:
         if (1 - val_loss / min_loss) > self._cfg.training.early_stopping_progress_threshold:
-            self._epochs_since_last_progress += 1
+            self._epochs_since_last_progress = 0
             if self._best_f1 < val_f1:
                 self._best_f1 = val_f1
                 self._save_best_model(model, epoch, threshold)
-            return False
-        else:
-            # TODO: save as best model
-            self._epochs_since_last_progress = 0
             return True
+        else:
+            self._epochs_since_last_progress += 1
+            return False
 
     def _should_early_stop(self):
         if self._cfg.training.early_stopping_epoch_count == 0:
