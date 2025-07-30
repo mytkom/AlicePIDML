@@ -7,7 +7,7 @@ from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
 from pdi.config import Config
-from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, GeneralDataPreparation, MCBatchItemOut
+from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, DataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
@@ -20,7 +20,7 @@ from pdi.lr_schedulers import build_lr_scheduler
 class ClassicEngine(BaseEngine):
     def __init__(self, cfg: Config, target_code: int) -> None:
         super().__init__(cfg, target_code)
-        self._data_prep = GeneralDataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
+        self._data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
 
         if self._cfg.model.architecture == "mlp":
             # Deal with missing data inplace on PreparedData object
@@ -29,8 +29,8 @@ class ClassicEngine(BaseEngine):
         (self._train_dl, self._val_dl, self._test_dl) = self._data_prep.create_dataloaders(
             batch_size=self._cfg.training.batch_size,
             num_workers=self._cfg.training.num_workers,
-            undersample=self._cfg.data.undersample_missing_detectors,
-            seed=self._cfg.seed
+            undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
+            undersample_pions=self._cfg.training.undersample_pions,
         )
 
         if self._data_prep._is_experimental:

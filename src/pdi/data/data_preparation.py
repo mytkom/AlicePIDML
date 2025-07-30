@@ -40,14 +40,17 @@ ExpBatchItem = tuple[Tensor, GroupID, MutableMapping[str, Tensor]]
 ExpBatchItemOut = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]
 
 class MCDataset(Dataset[MCBatchItem]):
-    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
+    """
+    MCDataset is a mapping for Monte Carlo (simulated) dataset containing items
+    that consist of an input tensor, a target tensor, group id and a dict of
+    unstandardized training columns and nSigma columns (if available).
     """
 
     def __init__(
         self,
         input: Tensor,
         target: Tensor,
-        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
+        group_id: GroupID,
         **unstandardized: Tensor,
     ):
         """__init__
@@ -55,7 +58,7 @@ class MCDataset(Dataset[MCBatchItem]):
         Args:
             input (Tensor): tensor containing all inputtensors
             target (Tensor): tensor containing all target tensors
-            group_id (GroupID): group id of missing detectors group
+            group_id (GroupID): ID of missing detectors group (binary representation of available columns)
             **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
         """
         self._input = input
@@ -76,20 +79,23 @@ class MCDataset(Dataset[MCBatchItem]):
 
 
 class ExpDataset(Dataset[ExpBatchItem]):
-    """MCDataset is a mapping for Monte Carlo (simulated) dataset containing items that consist of an input tensor, a target tensor, group id and a dict of unstandardized training or nSigma values tensors.
+    """
+    ExpDataset is a mapping for experimental dataset containing items that
+    consist of an input tensor, group id and a dict of unstandardized
+    training columns and nSigma columns (if available).
     """
 
     def __init__(
         self,
         input: Tensor,
-        group_id: GroupID, # ID of missing detectors group (binary representation of available columns)
+        group_id: GroupID,
         **unstandardized: Tensor,
     ):
         """__init__
 
         Args:
             input (Tensor): tensor containing all inputtensors
-            group_id (GroupID): group id of missing detectors group
+            group_id (GroupID): ID of missing detectors group (binary representation of available columns)
             **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
         """
         self._input = input
@@ -111,7 +117,13 @@ InT = TypeVar("InT")
 OutT = TypeVar("OutT")
 
 class CombinedDataLoader(Generic[InT, OutT]):
-    """CombinedDataLoader combines multiple dataloaders, shuffling their returned batches."""
+    """
+    CombinedDataLoader combines multiple dataloaders, during iteration there
+    is random choice of DataLoader performed. If DataLoader is empty it is removed
+    from dataloaders set and iteration is continued until all data is yielded.
+    If undersample flag is specified then each dataloader will be yielded the
+    same number of times---choice is sequential, not random like in default setting.
+    """
 
     def __init__(self, shuffle: bool, undersample: bool, seed: int, *dataloaders: DataLoader[InT]):
         """__init__
@@ -160,9 +172,9 @@ class CombinedDataLoader(Generic[InT, OutT]):
         return sum(len(d) for d in self.dataloaders)
 
 
-def calculate_checksum(filenames: list[str], config: DataConfig) -> str:
+def calculate_checksum(filenames: list[str], config: DataConfig, seed: int) -> str:
     """
-    Calculate a checksum based on the contents of the given files and a config object.
+    Calculate a checksum based on the contents of the given files, a config object and seed.
 
     Args:
         filenames (list[str]): List of file paths to include in the checksum.
@@ -182,6 +194,7 @@ def calculate_checksum(filenames: list[str], config: DataConfig) -> str:
 
     # Serialize the config object to JSON and include it in the checksum
     dict_config = dataclasses.asdict(config)
+    dict_config["seed"] = seed
     config_json = json.dumps(dict_config, sort_keys=True)
     hash.update(config_json.encode('utf-8'))
 
@@ -233,9 +246,34 @@ def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
 
 PreparedData = dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]]
 
-# TODO: describe this class after implementation
-class GeneralDataPreparation:
+class DataPreparation:
     """
+    DataPreparation is a class, which for provided DataConfig object handles all
+    the following stages of the data preparation (all related to data):
+        - loading data from ROOT files and extracting metadata,
+        - preprocessing: setting NaNs, cuts on fP and fTCPSignal,
+        - splitting into train/validation/test datasets,
+        - standardization using mean and std calculated on train dataset,
+        - grouping by missing values combinations,
+        - creation of data loaders.
+    For provided DataConfig, seed and input_paths the checksum is being calculated
+    and preprocessed data is being saved for future use in `base_dir/{checksum}` directory.
+    Class can also handle loading cached preprocessed data just by constructing new
+    DataPreparation object and using desired method, e.g. for obtaining data loaders.
+
+    The structure of the self._prepared_data (where the preprocessed data is stored):
+    {
+        (Split.TRAIN/Split.VAL/Split.TEST): {
+            GroupID: {
+                InputTarget.INPUT: pd.DataFrame with standardized input data,
+                InputTarget.TARGET: pd.DataFrame with target column (particle specie PDG code),
+                InputTarget.UNSTANDARDIZED: pd.DataFrame with unstandardized input columns and nSigma columns (if available)
+            }
+        }
+    }
+
+    DataPreparation contains member constants: COLUMNS_TO_SCAL_RUN_{run number} and MISSING_VALUE_INDICATORS, which can be
+    configured to change the behaviour of the class.
     """
 
     COLUMNS_TO_SCALE_RUN_3 = [
@@ -261,7 +299,7 @@ class GeneralDataPreparation:
 
         # Calculate checsum for input_paths' files, so caching results will be reliable and unique for this set of files
         self._log("Calculating input_paths + configuration checksum:")
-        self._inputs_checksum = calculate_checksum(input_paths, config)
+        self._inputs_checksum = calculate_checksum(input_paths, config, seed)
         self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
         self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
@@ -277,11 +315,6 @@ class GeneralDataPreparation:
 
         return self._prepared_data
 
-    # Data is stored in _prepared_data
-    # Structure:
-    # (Train/Validation/Test) Split: {
-    #   GroupID: { Input, Target, Unstandardized (input columns + nSigma columns as dict) }
-    #  }
     def prepare_data(self) -> None:
         """
             Preprocess, standardize and split data from root source file. It can be called explicitly
@@ -326,11 +359,6 @@ class GeneralDataPreparation:
                 gid: GroupID
                 group_data: pd.DataFrame
 
-                # Undersample (anti)pions to the next majority group in the training split
-                # for simulated data.
-                if split == Split.TRAIN and self._cfg.undersample_pions and not self._is_experimental:
-                    group_data = self._undersample_pions(group_data)
-
                 # Split data into ML inputs and targets and additional unstandardized dict with nSigma columns if available
                 self._prepared_data[split][gid] = self._input_target_unstandardized_split(group_data)
 
@@ -341,7 +369,7 @@ class GeneralDataPreparation:
         self._save_data()
 
     def create_dataloaders(
-        self, batch_size: int, num_workers: int, undersample: bool, seed: int, splits: Optional[list[Split]] = None
+        self, batch_size: int, num_workers: int, undersample_missing_detectors: bool, undersample_pions: bool, splits: Optional[list[Split]] = None
     ) -> tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
 
@@ -360,23 +388,28 @@ class GeneralDataPreparation:
 
         self._load_or_prepare_data(splits)
 
-        def create_dataset(input_target_unstandardized, gid):
+        def create_dataset(input_target_unstandardized: dict[InputTarget, pd.DataFrame], gid, split):
             if self._is_experimental:
                 return ExpDataset(
                     torch.tensor(input_target_unstandardized[InputTarget.INPUT].values, dtype=torch.float32),
                     gid,
                     **{
-                        column: torch.tensor(val.values, dtype=torch.float32)
+                        str(column): torch.tensor(val.values, dtype=torch.float32)
                         for column, val in input_target_unstandardized[InputTarget.UNSTANDARDIZED].items()
                     },
                 )
+
+            # Undersample (anti)pions to the next majority group in the training split
+            # for simulated data.
+            if split == Split.TRAIN and undersample_pions:
+                input_target_unstandardized = self._undersample_pions(input_target_unstandardized)
 
             return MCDataset(
                 torch.tensor(input_target_unstandardized[InputTarget.INPUT].values, dtype=torch.float32),
                 torch.tensor(input_target_unstandardized[InputTarget.TARGET].values, dtype=torch.float32),
                 gid,
                 **{
-                    column: torch.tensor(val.values, dtype=torch.float32)
+                    str(column): torch.tensor(val.values, dtype=torch.float32)
                     for column, val in input_target_unstandardized[InputTarget.UNSTANDARDIZED].items()
                 },
             )
@@ -384,13 +417,13 @@ class GeneralDataPreparation:
         dataloaders: dict[Split, CombinedDataLoader] = {}
         for split, grouped_data in self._prepared_data.items():
             datasets = {
-                gid: create_dataset(grouped_data[gid], gid)
+                gid: create_dataset(grouped_data[gid], gid, split)
                 for gid in grouped_data.keys()
             }
             dataloaders[split] = CombinedDataLoader(
                 (split == Split.TRAIN),
-                (split == Split.TRAIN and undersample),
-                seed,
+                (split == Split.TRAIN and undersample_missing_detectors),
+                self._seed,
                 *[
                     DataLoader(
                     dataset,
@@ -460,6 +493,8 @@ class GeneralDataPreparation:
                         "is_experimental": self._is_experimental,
                         "is_extended": self._is_extended,
                         "input_paths": self._input_paths,
+                        "data_config": dataclasses.asdict(self._cfg),
+                        "seed": self._seed,
                     }
                 )
             )
@@ -554,7 +589,7 @@ class GeneralDataPreparation:
             Split.TEST: pd.DataFrame(test_data)
         }
 
-    def _undersample_pions(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _undersample_pions(self, input_target_unstandardized: dict[InputTarget, pd.DataFrame]) -> dict[InputTarget, pd.DataFrame]:
         """
         Undersample pions (211) and anti-pions (-211) to match the maximum count of other particle groups.
 
@@ -567,7 +602,7 @@ class GeneralDataPreparation:
         rng = Random(self._seed)  # Seed for reproducibility
 
         # Group data by the target column
-        groups = data.groupby(TARGET_COLUMN, dropna=False)
+        groups = input_target_unstandardized[InputTarget.TARGET].groupby(TARGET_COLUMN, dropna=False)
 
         # Calculate the maximum count of non-pion groups
         non_pion_counts = groups.size().drop([211, -211], errors="ignore")
@@ -586,13 +621,15 @@ class GeneralDataPreparation:
                 sampled_indices.extend(group_indices)
 
         # Create a new DataFrame with the sampled indices
-        undersampled_data = data.loc[sampled_indices]
+        input_target_unstandardized[InputTarget.INPUT] = input_target_unstandardized[InputTarget.INPUT].loc[sampled_indices]
+        input_target_unstandardized[InputTarget.TARGET] = input_target_unstandardized[InputTarget.TARGET].loc[sampled_indices]
+        input_target_unstandardized[InputTarget.UNSTANDARDIZED] = input_target_unstandardized[InputTarget.UNSTANDARDIZED].loc[sampled_indices]
 
         # Print group sizes after undersampling
         self._log("Sizes of particle groups in training split after undersampling of pions:")
-        self._log(str(undersampled_data.groupby(TARGET_COLUMN, dropna=False).size().to_dict()))
+        self._log(str(input_target_unstandardized[InputTarget.TARGET].groupby(TARGET_COLUMN, dropna=False).size().to_dict()))
 
-        return undersampled_data
+        return input_target_unstandardized
 
     def _calc_scaling_params(self, train_split: pd.DataFrame):
         for column in train_split.columns:
@@ -631,7 +668,7 @@ class GeneralDataPreparation:
 
         return grouped_data
 
-    def _input_target_unstandardized_split(self, data):
+    def _input_target_unstandardized_split(self, data: pd.DataFrame) -> dict[InputTarget, pd.DataFrame]:
         input_data = data.loc[:, COLUMNS_FOR_TRAINING]
         if self._is_extended:
             # Add NSigma columns to unstandardized split, if they are available (extended dataset)

@@ -39,16 +39,9 @@ class DataConfig:
     outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation forest"] = None
 
     # Train/Validation/Test dataset split ratios. Validation is calculated automatically 1 - train_size - test_size
-    train_size: float = 0.56
+    # 0.64/0.16/0.2 split was proposed in literature: http://arxiv.org/abs/2504.16109
+    train_size: float = 0.64
     test_size: float = 0.2
-
-    # If to undersample observations by missing detectors groups on the DataLoader stage.
-    # For majority classes it randomly selects different subsample every epoch.
-    # Status: It proved to be necessary on Run3 data, because of 70% TPC only observations
-    undersample_missing_detectors: bool = True
-
-    # TODO: description
-    undersample_pions: bool = True
 
     # Is it data from ALICE Run 3? Different missing values of signals are dependant of this setting.
     is_run_3: bool = True
@@ -144,6 +137,14 @@ class TrainingConfig:
     # ~ 3% od data is proton observations, and 97% of data is not proton observations, if this option is set
     # to true, loss function will be weighted accordingly to this ratio
     weight_particles_species: bool = False
+
+    # If to undersample observations by missing detectors groups on the DataLoader stage.
+    # For majority classes it randomly selects different subsample every epoch.
+    # Status: It proved to be necessary on Run3 data, because of 70% TPC only observations
+    undersample_missing_detectors: bool = True
+
+    # TODO: description
+    undersample_pions: bool = True
 
 
 def mlp_default_hidden_layers():

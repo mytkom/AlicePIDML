@@ -17,7 +17,7 @@
             }
           }
         },
-        "data": {
+        "training": {
           "parameters": {
             "undersample_pions": {
               "values": [true, false]

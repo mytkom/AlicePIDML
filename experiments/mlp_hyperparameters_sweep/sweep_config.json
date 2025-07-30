@@ -34,18 +34,14 @@
             }
           }
         },
-        "data": {
+        "training": {
           "parameters": {
             "undersample_pions": {
               "values": [true, false]
             },
             "undersample_missing_detectors": {
               "values": [true, false]
-            }
-          }
-        },
-        "training": {
-          "parameters": {
+            },
             "start_lr": {
               "values": [
                 0.001,

@@ -24,6 +24,8 @@
         "max_epochs": 1,
         "early_stopping_epoch_count": 5,
         "early_stopping_progress_threshold": 0.001,
+        "undersample_missing_detectors": true,
+        "undersample_pions": true,
         "num_workers": 4,
         "start_lr": 0.0005,
         "weight_particles_species": false
@@ -35,10 +37,8 @@
             "iqr": {}
         },
         "outlier_filtering_method": null,
-        "train_size": 0.56,
+        "train_size": 0.64,
         "test_size": 0.2,
-        "undersample_missing_detectors": true,
-        "undersample_pions": true,
         "is_run_3": true,
     },
     "model": {

@@ -8,7 +8,7 @@ from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
 from pdi.config import Config
-from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, GeneralDataPreparation, MCBatchItemOut
+from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, DataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
@@ -20,22 +20,22 @@ from pdi.lr_schedulers import build_lr_scheduler
 class DomainAdaptationEngine(BaseEngine):
     def __init__(self, cfg: Config, target_code: int) -> None:
         super().__init__(cfg, target_code)
-        self._sim_data_prep = GeneralDataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
+        self._sim_data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
         (self._sim_train_dl, self._sim_val_dl, self._sim_test_dl) = self._sim_data_prep.create_dataloaders(
             batch_size=self._cfg.training.batch_size,
             num_workers=self._cfg.training.num_workers,
-            undersample=self._cfg.data.undersample_missing_detectors,
-            seed=self._cfg.seed
+            undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
+            undersample_pions=self._cfg.training.undersample_pions,
         )
         if self._sim_data_prep._is_experimental:
             raise RuntimeError("DomainAdaptationEngine: Expected simulated data, but got experimental data in cfg.sim_dataset_paths!")
 
-        self._exp_data_prep = GeneralDataPreparation(cfg.data, cfg.exp_dataset_paths, cfg.seed)
+        self._exp_data_prep = DataPreparation(cfg.data, cfg.exp_dataset_paths, cfg.seed)
         (self._exp_train_dl, self._exp_val_dl, self._exp_test_dl) = self._exp_data_prep.create_dataloaders(
             batch_size=self._cfg.training.batch_size,
             num_workers=self._cfg.training.num_workers,
-            undersample=self._cfg.data.undersample_missing_detectors,
-            seed=self._cfg.seed
+            undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
+            undersample_pions=self._cfg.training.undersample_pions,
         )
         if not self._exp_data_prep._is_experimental:
             raise RuntimeError("DomainAdaptationEngine: Expected experiments data, but got simulated data in cfg.exp_dataset_paths!")
