@@ -99,7 +99,7 @@ class ValidationConfig:
     num_workers: int = 8
 
     # Evaluate training results after this count of training epochs
-    validate_every: int = 5
+    validate_every: int = 3
 
 
 @dataclasses.dataclass
