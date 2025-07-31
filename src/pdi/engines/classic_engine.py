@@ -150,12 +150,19 @@ class ClassicEngine(BaseEngine):
 
             input_data = input_data.to(self._cfg.training.device)
             binary_targets = (targets == self._target_code).type(torch.float).to(self._cfg.training.device)
-            optimizer.zero_grad()
 
-            out = model(input_data)
-            loss = loss_func(out, binary_targets)
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16):
+                out = model(input_data)
+                # output is float16 because linear layers ``autocast`` to float16.
+                assert out.dtype is torch.float16
+    
+                loss = loss_func(out, binary_targets)
+                # loss is float32 because ``mse_loss`` layers ``autocast`` to float32.
+                assert loss.dtype is torch.float32
+
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
             # Handle metrics
             loss_run_sum += loss.item()
