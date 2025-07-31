@@ -281,8 +281,8 @@ class Config(JSONPyWizard):
     exp_dataset_paths: List[str] = dataclasses.field(default_factory=list)
     project_dir: str = "project"
     log_dir: str = "logs"
-    # TODO: check if can be easily adopted, it can give us performance boost
-    mixed_precision: str = "no"
+    # Implemented float16 mixed precision using torch.autocast
+    mixed_precision: bool = False
     seed: int = 0
     config_path: Optional[str] = None
 

@@ -106,7 +106,7 @@
     "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
     "project_dir": "engines_test",
     "log_dir": "logs",
-    "mixed_precision": "no",
+    "mixed_precision": false,
     "seed": 0,
     "config": null
 }

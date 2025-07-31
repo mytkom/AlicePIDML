@@ -118,7 +118,7 @@
     "exp_dataset_paths": [],
     "project_dir": "project",
     "log_dir": "logs",
-    "mixed_precision": "no",
+    "mixed_precision": false,
     "seed": 0,
     "config_path": null
 }
