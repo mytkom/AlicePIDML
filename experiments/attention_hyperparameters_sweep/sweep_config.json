@@ -1,0 +1,88 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "model": {
+          "parameters": {
+            "attention": {
+              "parameters": {
+                "dropout": {
+                  "values": [
+                    0.2,
+                    0.4,
+                    0.6
+                  ]
+                },
+                "dropout": {
+                  "values": [
+                    0.2,
+                    0.4,
+                    0.6
+                  ]
+                },
+                "embed_hidden": {
+                  "values": [
+                    128,
+                    256
+                  ]
+                },
+                "embed_dim": {
+                  "values": [
+                    32,
+                    64
+                  ]
+                },
+                "ff_hidden": {
+                  "values": [
+                    128,
+                    256
+                  ]
+                },
+                "pool_hidden": {
+                  "values": [
+                    64,
+                    128
+                  ]
+                },
+                "num_heads": {
+                  "values": [
+                    2,
+                    4
+                  ]
+                },
+                "num_blocks": {
+                  "values": [
+                    2,
+                    4
+                  ]
+                },
+              }
+            }
+          }
+        },
+        "training": {
+          "parameters": {
+            "undersample_missing_detectors": {
+              "values": [true, false]
+            },
+            "start_lr": {
+              "values": [
+                0.001,
+                0.0003,
+                0.0001
+              ]
+            },
+            "lr_scheduler": {
+              "values": [null, "exponential", "polynomial", "cosine_restarts"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

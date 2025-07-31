@@ -1,6 +1,5 @@
 import dataclasses
 import gzip
-from itertools import cycle
 import json
 import os
 import pickle
@@ -11,12 +10,11 @@ import torch
 import hashlib
 from pathlib import Path
 from random import Random
-from typing import Callable, Generic, Iterable, Iterator, Tuple, TypeVar, Optional, List, MutableMapping
+from typing import Callable, Generic, Iterator, Tuple, TypeVar, Optional, List, MutableMapping
 from sklearn.model_selection import train_test_split
-from torch import Tensor, rand
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.data.group_id_helpers import binary_array_to_group_id
 from pdi.data.constants import (
     PROCESSED_DIR,
@@ -272,6 +270,12 @@ class DataPreparation:
         }
     }
 
+    Files saved in `base_dir/{checksum}`:
+        - for each TRAIN/VAL/TEST splits: "prepared_data_{split}.pkl" with prepared data dictionary
+        - "dataset_metadata.json" with data config dumped, seed, input paths and dataset metadata (is_experimental, is_extended).
+        - "columns_for_training.json" with array of column labels ordered the same way during training and inference.
+        - "scaling_params.json" with standardization params calculated on train dataset.
+
     DataPreparation contains member constants: COLUMNS_TO_SCAL_RUN_{run number} and MISSING_VALUE_INDICATORS, which can be
     configured to change the behaviour of the class.
     """
@@ -310,33 +314,28 @@ class DataPreparation:
         self._columns_to_standardize: List[str] = self.COLUMNS_TO_SCALE_RUN_3 if config.is_run_3 else self.COLUMNS_TO_SCALE_RUN_2
         self._prepared_data: dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]] = {}
 
-    def get_prepared_data(self) -> PreparedData:
-        self._load_or_prepare_data([Split.TRAIN, Split.VAL, Split.TEST])
-
-        return self._prepared_data
-
     def prepare_data(self) -> None:
         """
-            Preprocess, standardize and split data from root source file. It can be called explicitly
-            to force data preparation (in case of cached data in bad state).
+        Read, preprocess, standardize, split and group data from ROOT source files. It can be called explicitly
+        to force data preparation (in case of cached data in bad state).
         """
         # It expects data in ROOT format, which is extracted using O2Physics' task PIDMLProducer.
         # This method can distinguish 4 data formats (simulated or experimental + basic or extended)
         data = self._load_data()
 
-        # When after splits some particle specie track is unique in its group,
-        # it raises an error in some point, TODO: do it cleaner way
+        # TODO: investigate, why is it needed
+        # Later, after splits and grouping some observation can be the only one of its class,
+        # such unique observation raises an error at some point in the code.
         if not self._is_experimental:
             data = self._delete_unique_targets(data)
 
-        # When there is no detector value in data some special
-        # values indicating missing values are returned e.g. -999.0.
-        # This method sets such values to NaNs
+        # When there is no detector value in data, some special values indicating missing values
+        # are returned from PIDMLProducer task of O2Physics (e.g. -999.0.). This method sets such values to NaNs.
         data = self._make_missing_null(data)
 
         # TOF is not reliable for transverse momentum (fPt) lower than PT_CUT,
-        # TPC was returning outliers (10M signal value), which were bad for
-        # model performance - we filter now manually tracks with fTPCSignal > TPC_CUT
+        # TPC was returning outliers (10M signal value), which were bad for standardization parameters
+        # calculation - we filter now manually tracks with fTPCSignal > TPC_CUT
         data = self._perform_cuts(data)
 
         # Split dataset into Train/Validation/Test
@@ -354,19 +353,30 @@ class DataPreparation:
 
             self._prepared_data[split] = {}
 
+            # Group data by missing detectors; GroupID is binary representation of missing columns,
+            # binary 1 mean column is present in group, 0 indicates that it is missing.
             grouped_split_data_dict = self._group_data(split_data)
             for gid, group_data in grouped_split_data_dict.items():
                 gid: GroupID
                 group_data: pd.DataFrame
 
-                # Split data into ML inputs and targets and additional unstandardized dict with nSigma columns if available
+                # Split data into inputs, targets and additional unstandardized inputs with nSigma columns if available
                 self._prepared_data[split][gid] = self._input_target_unstandardized_split(group_data)
 
                 # Standardize inputs using previously calculated params
                 self._prepared_data[split][gid][InputTarget.INPUT] = self._standardize_data(self._prepared_data[split][gid][InputTarget.INPUT])
 
-        # Cache prepared data
+        # Cache prepared data using checksum calculated in constructor.
         self._save_data()
+
+    def get_prepared_data(self, splits: List[Split] = list(Split)) -> PreparedData:
+        """
+        Returns PreparedData object. If splits passed to this function are not loaded to self._prepared_data
+        it is first loaded. If additional splits are already loaded, they are being returned too.
+        """
+        self._load_or_prepare_data(splits)
+
+        return self._prepared_data
 
     def create_dataloaders(
         self, batch_size: int, num_workers: int, undersample_missing_detectors: bool, undersample_pions: bool, splits: Optional[list[Split]] = None
@@ -375,13 +385,17 @@ class DataPreparation:
 
         Args:
             batch_size (int): batch size
-            num_workers (int): number of worker processed used in loading data.
-                See `torch.utils.data.DataLoader` for more info.
+            num_workers (int): number of worker processes used for loading data.
+                See `torch.utils.data.DataLoader` for more information.
+            undersample_missing_detectors (bool): If true, give the same amount of batches from
+                each missing detector combination group of observations in CombinedDataLoader. (Only in train split)
+            undersample_pions (bool): If true, undersample pions to the next majority class. (Only in train split)
             splits (list[Split], optional): list of splits to create dataloaders for.
                 Defaults to [Split.TRAIN, Split.VAL, Split.TEST].
 
         Returns:
-            tuple[Iterable[MCBatchItem], ...]: tuple of dataloaders, one for each split.
+            dataloaders (tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]):
+                tuple of combined dataloaders, one for each split.
         """
         if splits is None:
             splits = list(Split)
@@ -439,11 +453,26 @@ class DataPreparation:
         return (*dataloaders.values(),)
 
     def transform_prepared_data(self, transform: Callable[[PreparedData], PreparedData]):
+        """
+        Handful interface for transforming self._prepared_data from outside. This method can
+        be used to e.g. handle missing data imputation strategies.
+        """
         self._load_or_prepare_data([Split.TRAIN, Split.VAL, Split.TEST])
 
         self._prepared_data = transform(self._prepared_data)
 
     def pos_weight(self, target: int) -> float:
+        """
+        Another way of handling imbalanced classes is to use weighted loss function during training.
+        This function returns weight of positive class for given target class (all other targets are negative class).
+        It is calculated solely on train split.
+
+        Args:
+            target (int): PDG code of targetted particle specie.
+
+        Returns:
+            positive_class_weight (float):
+        """
         if self._is_experimental:
             raise RuntimeError("pos_weight is infeasible for experimental dataset!")
 
@@ -459,20 +488,18 @@ class DataPreparation:
         return pos_weight
 
     def get_group_ids(self) -> list[GroupID]:
-        """get_group_ids returns the ids of groups in the dataset
-
-        Returns:
-            list[GroupID]: list of group ids
+        """
+        Returns the ids of missing columns groups in the dataset.
         """
         self._load_or_prepare_data([Split.TRAIN])
 
         return list(self._prepared_data[Split.TRAIN].keys())
 
     def _save_data(self) -> None:
-        """save_data saves preprocessed data, as well as scaling parameters, to disk.
-        Save location is given in the class variable `save_dir`
         """
-
+        Saves preprocessed data, scaling parameters, columns for training and dataset
+        metadata in checksum named subdirectory in processed data directory.
+        """
         os.makedirs(self.save_dir, exist_ok=True)
         for split, it_data in self._prepared_data.items():
             with gzip.open(
@@ -507,6 +534,10 @@ class DataPreparation:
             )
 
     def _load_data(self) -> pd.DataFrame:
+        """
+        Loads ROOT files in self._input_paths. Exracts metadata about dataset: a) if is experimental
+        b) if is extended.
+        """
         data, self._is_experimental, self._is_extended = load_root_data(self._input_paths)
 
         if self._is_experimental:
@@ -523,6 +554,9 @@ class DataPreparation:
 
     # TODO: inspect, why it is needed---what code do not work if such targets exists
     def _delete_unique_targets(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Delete targets with less than THRESHOLD of observations.
+        """
         THRESHOLD = 400
         target_counts = data[TARGET_COLUMN].value_counts()
         for target, count in target_counts.items():
@@ -531,6 +565,9 @@ class DataPreparation:
         return data
 
     def _make_missing_null(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Fill special missing value indicators with NaNs in provided data DataFrame.
+        """
         for column, val in self.MISSING_VALUE_INDICATORS.items():
             data.loc[data[column] == val, column] = np.NaN
 
@@ -548,6 +585,9 @@ class DataPreparation:
         return data
 
     def _perform_cuts(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Perform simple preprocessing cuts on dataset.
+        """
         # TCPSignal must be positive
         data = data.loc[data["fTPCSignal"] > 0, :]
 
@@ -563,6 +603,12 @@ class DataPreparation:
         return data
 
     def _test_train_split(self, data: pd.DataFrame) -> dict[Split, pd.DataFrame]:
+        """
+        Split dataset into train/validation/test splits. Their ratio is specified in DataConfig object
+        in self._cfg. It uses sklearn's method for splitting. If it is simulated data, the split also
+        uses statify strategy by target codes. This way particle specie ratios should be the same in
+        the resulting splits.
+        """
         train_to_val_ratio = self._cfg.train_size / (1 - self._cfg.test_size)
 
         (data_not_test, test_data) = train_test_split(
@@ -592,12 +638,6 @@ class DataPreparation:
     def _undersample_pions(self, input_target_unstandardized: dict[InputTarget, pd.DataFrame]) -> dict[InputTarget, pd.DataFrame]:
         """
         Undersample pions (211) and anti-pions (-211) to match the maximum count of other particle groups.
-
-        Args:
-            data (pd.DataFrame): Input DataFrame with a TARGET_COLUMN.
-
-        Returns:
-            pd.DataFrame: DataFrame with undersampled pions and anti-pions.
         """
         rng = Random(self._seed)  # Seed for reproducibility
 
@@ -632,6 +672,10 @@ class DataPreparation:
         return input_target_unstandardized
 
     def _calc_scaling_params(self, train_split: pd.DataFrame):
+        """
+        Calculate mean and standard deviation for each column, which is in self._columns_to_standardize.
+        Those values are saved as a member variable self._scaling_params and later used for standardization.
+        """
         for column in train_split.columns:
             if column not in self._columns_to_standardize:
                 continue
@@ -658,6 +702,10 @@ class DataPreparation:
         self._log(f"Scaling (standardization) params has been calculated on training split, results:\n{self._scaling_params}")
 
     def _group_data(self, data):
+        """
+        Groups data by missing columns. GroupID is binary mask of missing columns (1 - column present, 0 - column missing), order
+        of columns in a mask determined by COLUMNS_FOR_TRAINING array. There are helper functions provided in project to handle it easily.
+        """
         missing = ~data.isnull()
 
         groups = missing.groupby(list(COLUMNS_FOR_TRAINING), dropna=False).groups
@@ -669,6 +717,10 @@ class DataPreparation:
         return grouped_data
 
     def _input_target_unstandardized_split(self, data: pd.DataFrame) -> dict[InputTarget, pd.DataFrame]:
+        """
+        Split data into inputs (standardized inputs for ML model), targets (ground truth, if not experimental) and additional
+        information with unstandardized input columns and possibly additional data like nSigma columns.
+        """
         input_data = data.loc[:, COLUMNS_FOR_TRAINING]
         if self._is_extended:
             # Add NSigma columns to unstandardized split, if they are available (extended dataset)
@@ -683,27 +735,20 @@ class DataPreparation:
         return {InputTarget.INPUT: input_data, InputTarget.UNSTANDARDIZED: unstandardized}
 
     def _standardize_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Make data mean equal 0 and standard deviation equal 1, similarly to standard normal distribution. Then
+        it is better conditioned for ML model.
+        """
         for _, row in self._scaling_params.iterrows():
             col = row["column"]
             data[col] = (data[col] - row["mean"]) / row["std"]
 
         return data
 
-    def _load_preprocessed_data(self, splits):
-        for split in splits:
-            with gzip.open(
-                f"{self.save_dir}/prepared_data_{split.name}.pkl", "rb"
-            ) as file:
-                self._prepared_data[split] = pickle.load(file)
-
-        with open(f"{self.save_dir}/dataset_metadata.json", "r", encoding="UTF-8") as f:
-            metadata = json.load(f)
-            self._is_experimental = metadata["is_experimental"]
-            self._is_extended = metadata["is_extended"]
-
-        self._log("Successfuly loaded preprocessed data! No need for from scratch preparation.")
-
     def _try_load_preprocessed_data(self, splits) -> bool:
+        """
+        Check if data is already preprocessed, returns boolean indicating success.
+        """
         if any(
             key not in self._prepared_data
             for key in splits
@@ -716,9 +761,29 @@ class DataPreparation:
         return True
 
     def _load_or_prepare_data(self, splits):
+        """
+        Try to load already cached preprocessed data, if it is not available, prepare it from scratch.
+        """
         if not self._try_load_preprocessed_data(splits):
             self._log("Cannot load preprocessed data, preparing it from scratch:")
             self.prepare_data()
+
+    def _load_preprocessed_data(self, splits: List[Split]):
+        """
+        Load preprocessed data, only expected splits.
+        """
+        for split in splits:
+            with gzip.open(
+                f"{self.save_dir}/prepared_data_{split.name}.pkl", "rb"
+            ) as file:
+                self._prepared_data[split] = pickle.load(file)
+
+        with open(f"{self.save_dir}/dataset_metadata.json", "r", encoding="UTF-8") as f:
+            metadata = json.load(f)
+            self._is_experimental = metadata["is_experimental"]
+            self._is_extended = metadata["is_extended"]
+
+        self._log("Successfuly loaded preprocessed data! No need for from scratch preparation.")
 
     def _log(self, message: str):
         print(f"[DataPreparation] {message}")

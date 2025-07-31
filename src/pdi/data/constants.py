@@ -27,6 +27,5 @@ NSIGMA_COLUMNS = [
 ]
 
 PROCESSED_DIR = "data/processed"
-SEED = 42
 TARGET_COLUMN = "fPdgCode"
 GROUP_ID_KEY = "group_id"

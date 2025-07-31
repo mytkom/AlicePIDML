@@ -150,7 +150,7 @@ class AttentionModel(nn.Module):
     """AttentionModel is an attention-based model used for processing incomplete examples."""
 
     class _AttentionPooling(nn.Module):
-        def __init__(self, in_dim, pool_dim, activation):
+        def __init__(self, in_dim: int, pool_dim: int, activation: type[nn.Module]):
             super().__init__()
             self.net = NeuralNet([in_dim, pool_dim, in_dim], activation)
             self.softmax = nn.Softmax(dim=1)
