@@ -801,6 +801,8 @@ class DataPreparation:
             self._is_experimental = metadata["is_experimental"]
             self._is_extended = metadata["is_extended"]
 
+        self._scaling_params = pd.read_json(f"{self.save_dir}/scaling_params.json", orient="split")
+
         self._log("Successfuly loaded preprocessed data! No need for from scratch preparation.")
 
     def _log(self, message: str):
