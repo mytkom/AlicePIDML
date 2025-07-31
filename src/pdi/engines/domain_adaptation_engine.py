@@ -94,7 +94,7 @@ class DomainAdaptationEngine(BaseEngine):
 
             loss_arr.append(train_loss)
 
-            if epoch % self._cfg.validation.validate_every:
+            if epoch % self._cfg.validation.validate_every == 0:
                 # Validation
                 val_metrics = self._evaluate(
                     model=model,
