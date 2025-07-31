@@ -93,6 +93,16 @@ class LRSchedulersConfig:
     constant: ConstantLRConfig = dataclasses.field(default_factory=ConstantLRConfig)
 
 @dataclasses.dataclass
+class ValidationConfig:
+    batch_size: int = 8192
+
+    num_workers: int = 8
+
+    # Evaluate training results after this count of training epochs
+    validate_every: int = 5
+
+
+@dataclasses.dataclass
 class TrainingConfig:
     # Choose optimizer
     optimizers: OptimizersConfig = dataclasses.field(default_factory=OptimizersConfig)
@@ -124,6 +134,7 @@ class TrainingConfig:
 
     # How many epochs without progress needs to be done before early stopping
     early_stopping_epoch_count: int = 5
+
     # Defines what is progress in loss minimization; if (1 - current_loss / min_loss > threshold),
     # then epochs without progress counter is being reset
     early_stopping_progress_threshold: float = .001
@@ -258,6 +269,8 @@ class Config(JSONPyWizard):
     sweep: SweepConfig = dataclasses.field(default_factory=SweepConfig)
 
     training: TrainingConfig = dataclasses.field(default_factory=TrainingConfig)
+
+    validation: ValidationConfig = dataclasses.field(default_factory=ValidationConfig)
 
     # Paths to simulated datasets obtained using O2Physics's PIDMLProducer with ML option enabled
     sim_dataset_paths: List[str] = dataclasses.field(default_factory=list)

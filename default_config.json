@@ -109,6 +109,11 @@
         "undersample_missing_detectors": true,
         "undersample_pions": true
     },
+    "validation": {
+        "batch_size": 8192,
+        "num_workers": 8,
+        "validate_every": 5
+    },
     "sim_dataset_paths": [],
     "exp_dataset_paths": [],
     "project_dir": "project",

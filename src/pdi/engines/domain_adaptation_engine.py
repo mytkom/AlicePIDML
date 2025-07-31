@@ -9,7 +9,7 @@ from torch.optim import Optimizer
 from tqdm import tqdm
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, DataPreparation, MCBatchItemOut
-from pdi.data.types import GroupID
+from pdi.data.types import GroupID, Split
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.losses import build_loss
@@ -22,8 +22,16 @@ class DomainAdaptationEngine(BaseEngine):
         super().__init__(cfg, target_code)
         self._sim_data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
         (self._sim_train_dl, self._sim_val_dl, self._sim_test_dl) = self._sim_data_prep.create_dataloaders(
-            batch_size=self._cfg.training.batch_size,
-            num_workers=self._cfg.training.num_workers,
+            batch_size={
+                    Split.TRAIN: self._cfg.training.batch_size,
+                    Split.VAL: self._cfg.validation.batch_size,
+                    Split.TEST: self._cfg.validation.batch_size,
+            },
+            num_workers={
+                    Split.TRAIN: self._cfg.training.num_workers,
+                    Split.VAL: self._cfg.validation.num_workers,
+                    Split.TEST: self._cfg.validation.num_workers,
+            },
             undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
             undersample_pions=self._cfg.training.undersample_pions,
         )
@@ -32,8 +40,16 @@ class DomainAdaptationEngine(BaseEngine):
 
         self._exp_data_prep = DataPreparation(cfg.data, cfg.exp_dataset_paths, cfg.seed)
         (self._exp_train_dl, self._exp_val_dl, self._exp_test_dl) = self._exp_data_prep.create_dataloaders(
-            batch_size=self._cfg.training.batch_size,
-            num_workers=self._cfg.training.num_workers,
+            batch_size={
+                    Split.TRAIN: self._cfg.training.batch_size,
+                    Split.VAL: self._cfg.validation.batch_size,
+                    Split.TEST: self._cfg.validation.batch_size,
+            },
+            num_workers={
+                    Split.TRAIN: self._cfg.training.num_workers,
+                    Split.VAL: self._cfg.validation.num_workers,
+                    Split.TEST: self._cfg.validation.num_workers,
+            },
             undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
             undersample_pions=self._cfg.training.undersample_pions,
         )
@@ -71,55 +87,56 @@ class DomainAdaptationEngine(BaseEngine):
                 exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_train_dl),
             )
 
-            # Validation
-            val_metrics = self._evaluate(
-                model=model,
-                loss_func_class=loss_func_class,
-                loss_func_domain=loss_func_domain,
-                sim_dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._sim_val_dl),
-                exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_val_dl),
-            )
-
-            # Threshold for posterior probability to identify as positive
-            # it is optimized for f1 metric
-            model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
-
-            val_loss = val_metrics['val/loss']
-
             # New learning rate for the next
             scheduler.step()
 
             loss_arr.append(train_loss)
-            val_loss_arr.append(val_metrics['val/loss'])
 
-            self._early_stopping_step(
-                model=model,
-                threshold=val_metrics["val/threshold"],
-                epoch=epoch,
-                val_loss=val_loss,
-                min_loss=min_loss,
-                val_f1=val_metrics["val/f1"],
-            )
-            if  val_loss < min_loss:
-                min_loss = val_loss
+            if epoch % self._cfg.validation.validate_every:
+                # Validation
+                val_metrics = self._evaluate(
+                    model=model,
+                    loss_func_class=loss_func_class,
+                    loss_func_domain=loss_func_domain,
+                    sim_dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._sim_val_dl),
+                    exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_val_dl),
+                )
 
-            # Log validation metrics
-            self._log_results(
-                metrics = {
-                    "epoch": epoch,
-                    "scheduled_lr": scheduler.get_last_lr()[0],
-                    "val/f1_best": self._best_f1,
-                    **val_metrics,
-                },
-                csv_name = f"validation_metrics.csv"
-            )
-            print(
-                f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
-            )
+                # Threshold for posterior probability to identify as positive
+                # it is optimized for f1 metric
+                model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
 
-            if self._should_early_stop():
-                print(f"Finishing training early at epoch: {epoch}")
-                break
+                val_loss = val_metrics['val/loss']
+                val_loss_arr.append(val_metrics['val/loss'])
+
+                self._early_stopping_step(
+                    model=model,
+                    threshold=val_metrics["val/threshold"],
+                    epoch=epoch,
+                    val_loss=val_loss,
+                    min_loss=min_loss,
+                    val_f1=val_metrics["val/f1"],
+                )
+                if  val_loss < min_loss:
+                    min_loss = val_loss
+
+                # Log validation metrics
+                self._log_results(
+                    metrics = {
+                        "epoch": epoch,
+                        "scheduled_lr": scheduler.get_last_lr()[0],
+                        "val/f1_best": self._best_f1,
+                        **val_metrics,
+                    },
+                    csv_name = f"validation_metrics.csv"
+                )
+                print(
+                    f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
+                )
+
+                if self._should_early_stop():
+                    print(f"Finishing training early at epoch: {epoch}")
+                    break
 
         self._model = model
 
@@ -183,23 +200,24 @@ class DomainAdaptationEngine(BaseEngine):
             exp_inputs = exp_inputs.to(self._cfg.training.device)
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
-            optimizer.zero_grad()
 
-            # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
-            sim_out: Tensor = model(sim_inputs)
-            sim_class_out = sim_out[:,0].unsqueeze(dim=1)
-            sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+                # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
+                sim_out: Tensor = model(sim_inputs)
+                sim_class_out = sim_out[:,0].unsqueeze(dim=1)
+                sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
-            exp_out = model(exp_inputs)
-            exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
+                exp_out = model(exp_inputs)
+                exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
-            loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
-            loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
-            loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
+                loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
+                loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
+                loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
 
             loss = loss_source_class + loss_source_domain + loss_target_domain
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
             # Handle metrics
             loss_run_sum += loss.item()
@@ -278,17 +296,18 @@ class DomainAdaptationEngine(BaseEngine):
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
-            sim_out = model(sim_inputs)
-            sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
-            sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+                # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
+                sim_out = model(sim_inputs)
+                sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
+                sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
-            exp_out = model(exp_inputs)
-            exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
+                exp_out = model(exp_inputs)
+                exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
-            loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
-            loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
-            loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
+                loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
+                loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
+                loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
 
             loss = loss_source_class + loss_source_domain + loss_target_domain
             loss.backward()
@@ -423,17 +442,18 @@ class DomainAdaptationEngine(BaseEngine):
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
-            sim_out = model(sim_inputs)
-            sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
-            sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+                # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
+                sim_out = model(sim_inputs)
+                sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
+                sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
-            exp_out = model(exp_inputs)
-            exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
+                exp_out = model(exp_inputs)
+                exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
-            loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
-            loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
-            loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
+                loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
+                loss_source_domain = loss_func_domain(sim_domain_out, torch.zeros_like(sim_domain_out))
+                loss_target_domain = loss_func_domain(exp_domain_out, torch.ones_like(exp_domain_out))
 
             loss = loss_source_class + loss_source_domain + loss_target_domain
             loss.backward()

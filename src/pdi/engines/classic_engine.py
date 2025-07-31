@@ -8,7 +8,7 @@ from torch.optim import Optimizer
 from tqdm import tqdm
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, DataPreparation, MCBatchItemOut
-from pdi.data.types import GroupID
+from pdi.data.types import GroupID, Split
 from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
 from pdi.evaluate import maximize_f1
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
@@ -27,8 +27,16 @@ class ClassicEngine(BaseEngine):
             self._data_prep.transform_prepared_data(MISSING_DATA_STRATEGIES[cfg.model.mlp.missing_data_strategy])
 
         (self._train_dl, self._val_dl, self._test_dl) = self._data_prep.create_dataloaders(
-            batch_size=self._cfg.training.batch_size,
-            num_workers=self._cfg.training.num_workers,
+            batch_size={
+                    Split.TRAIN: self._cfg.training.batch_size,
+                    Split.VAL: self._cfg.validation.batch_size,
+                    Split.TEST: self._cfg.validation.batch_size,
+            },
+            num_workers={
+                    Split.TRAIN: self._cfg.training.num_workers,
+                    Split.VAL: self._cfg.validation.num_workers,
+                    Split.TEST: self._cfg.validation.num_workers,
+            },
             undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
             undersample_pions=self._cfg.training.undersample_pions,
         )
@@ -66,53 +74,54 @@ class ClassicEngine(BaseEngine):
                 dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._train_dl),
             )
 
-            # Validation
-            val_metrics = self._evaluate(
-                model=model,
-                loss_func=loss,
-                dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._val_dl),
-            )
-
-            # Threshold for posterior probability to identify as positive
-            # it is optimized for f1 metric
-            model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
-
-            val_loss = val_metrics["val/loss"]
-
             # New learning rate for the next
             scheduler.step()
 
             loss_arr.append(train_loss)
-            val_loss_arr.append(val_loss)
 
-            self._early_stopping_step(
-                model=model,
-                threshold=val_metrics["val/threshold"],
-                val_loss=val_loss,
-                min_loss=min_loss,
-                val_f1=val_metrics["val/f1"],
-                epoch=epoch,
-            )
-            if  val_loss < min_loss:
-                min_loss = val_loss
+            if epoch % self._cfg.validation.validate_every == 0:
+                # Validation
+                val_metrics = self._evaluate(
+                    model=model,
+                    loss_func=loss,
+                    dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._val_dl),
+                )
 
-            # Log validation metrics
-            self._log_results(
-                metrics = {
-                    "epoch": epoch,
-                    "scheduled_lr": scheduler.get_last_lr()[0],
-                    "val/f1_best": self._best_f1,
-                    **val_metrics,
-                },
-                csv_name = f"validation_metrics.csv"
-            )
-            print(
-                f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
-            )
+                # Threshold for posterior probability to identify as positive
+                # it is optimized for f1 metric
+                model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
 
-            if self._should_early_stop():
-                print(f"Finishing training early at epoch: {epoch}")
-                break
+                val_loss = val_metrics["val/loss"]
+                val_loss_arr.append(val_loss)
+
+                self._early_stopping_step(
+                    model=model,
+                    threshold=val_metrics["val/threshold"],
+                    val_loss=val_loss,
+                    min_loss=min_loss,
+                    val_f1=val_metrics["val/f1"],
+                    epoch=epoch,
+                )
+                if  val_loss < min_loss:
+                    min_loss = val_loss
+
+                # Log validation metrics
+                self._log_results(
+                    metrics = {
+                        "epoch": epoch,
+                        "scheduled_lr": scheduler.get_last_lr()[0],
+                        "val/f1_best": self._best_f1,
+                        **val_metrics,
+                    },
+                    csv_name = f"validation_metrics.csv"
+                )
+                print(
+                    f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
+                )
+
+                if self._should_early_stop():
+                    print(f"Finishing training early at epoch: {epoch}")
+                    break
 
         return loss_arr, val_loss_arr
 

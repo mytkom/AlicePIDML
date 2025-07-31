@@ -379,7 +379,7 @@ class DataPreparation:
         return self._prepared_data
 
     def create_dataloaders(
-        self, batch_size: int, num_workers: int, undersample_missing_detectors: bool, undersample_pions: bool, splits: Optional[list[Split]] = None
+        self, batch_size: dict[Split, int], num_workers: dict[Split, int], undersample_missing_detectors: bool, undersample_pions: bool, splits: Optional[list[Split]] = None
     ) -> tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
 
@@ -441,9 +441,9 @@ class DataPreparation:
                 *[
                     DataLoader(
                     dataset,
-                    batch_size=batch_size,
+                    batch_size=batch_size[split],
                     shuffle=(split == Split.TRAIN),
-                    num_workers=num_workers,
+                    num_workers=num_workers[split],
                     pin_memory=True,
                     )
                     for dataset in datasets.values()
