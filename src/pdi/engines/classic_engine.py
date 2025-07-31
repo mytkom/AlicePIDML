@@ -151,14 +151,9 @@ class ClassicEngine(BaseEngine):
             input_data = input_data.to(self._cfg.training.device)
             binary_targets = (targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
                 out = model(input_data)
-                # output is float16 because linear layers ``autocast`` to float16.
-                assert out.dtype is torch.float16
-    
                 loss = loss_func(out, binary_targets)
-                # loss is float32 because ``mse_loss`` layers ``autocast`` to float32.
-                assert loss.dtype is torch.float32
 
             loss.backward()
             optimizer.step()
@@ -214,12 +209,13 @@ class ClassicEngine(BaseEngine):
         model.eval()
         for _, (input_data, target, gid, _) in enumerate(tqdm(dataloader)):
             input_data = input_data.to(self._cfg.training.device)
+            binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            out = model(input_data)
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+                out = model(input_data)
+                loss = loss_func(out, binary_target)
 
             # loss
-            binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
-            loss = loss_func(out, binary_target)
             val_loss += loss.item()
             count += 1
 
@@ -262,12 +258,12 @@ class ClassicEngine(BaseEngine):
         model.eval()
         for _, (input_data, target, gid, data_dict) in enumerate(tqdm(dataloader)):
             input_data = input_data.to(self._cfg.training.device)
-
-            out = model(input_data)
-
-            # loss
             binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
-            loss = loss_func(out, binary_target)
+
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+                out = model(input_data)
+                loss = loss_func(out, binary_target)
+
             val_loss += loss.item()
             count += 1
 
