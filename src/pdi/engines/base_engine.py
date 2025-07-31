@@ -20,6 +20,15 @@ TrainResults = tuple[List[float], List[float]]
 TestResults = tuple[dict[str, float], dict[str, NDArray]]
 
 class BaseEngine:
+    """
+    BaseEngine is a class, which is a super class of all the engines. Engine is an object, which knows
+    how to run data preparation, training and testing of a specific model and how to save files regarding it.
+    Child classes of BaseEngine needs to implement train() and test() methods and can use helper methods
+    to extract common behaviour like logging.
+
+    Function build_engine(), which knows what engine is suitable for given config is in __init__.py file
+    of this (engines) module.
+    """
     def __init__(self, cfg: Config, target_code: int) -> None:
         self._target_code = target_code
         self._epoch_num = 0
@@ -49,6 +58,15 @@ class BaseEngine:
         pass
 
     def _save_best_model(self, model: nn.Module, epoch: int, threshold: float):
+        """
+        Helper function suitable to save best model of pytorch training engine.
+        If your engine is not training pytorch model, unfortunatelly this helper
+        cannot be used.
+
+        It saves two files in subdirectory "model_weights":
+            - best.pt with model weights
+            - metadata.json with model metadata
+        """
         dirpath = os.path.join(self._base_dir, "model_weights")
         os.makedirs(dirpath, exist_ok=True)
 

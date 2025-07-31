@@ -44,6 +44,8 @@ class ClassicEngine(BaseEngine):
         if self._data_prep._is_experimental:
             raise RuntimeError("ClassicEngine got experimental data, it is not suited to handle it!")
 
+        self._data_prep.save_dataset_metadata(self._base_dir)
+
 
     def train(self) -> TrainResults:
         model = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())

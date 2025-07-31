@@ -297,7 +297,14 @@ class DataPreparation:
         "fTRDSignal": 0
     }
 
-    def __init__(self, config: DataConfig, input_paths: List[str], seed: int, base_dir = PROCESSED_DIR) -> None:
+    def __init__(
+            self,
+            config: DataConfig,
+            input_paths: List[str],
+            seed: int,
+            base_dir = PROCESSED_DIR,
+            scaling_params: Optional[pd.DataFrame] = None
+    ) -> None:
         if len(input_paths) == 0:
             raise KeyError("You must specify at least one input_path with data!")
 
@@ -306,7 +313,10 @@ class DataPreparation:
         self._inputs_checksum = calculate_checksum(input_paths, config, seed)
         self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
-        self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
+        if scaling_params is not None:
+            self._scaling_params: pd.DataFrame = scaling_params
+        else:
+            self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
         self._cfg: DataConfig = config
         self._input_paths: List[str] = input_paths
         self._seed = seed
@@ -344,7 +354,11 @@ class DataPreparation:
 
         # Standardization parameters (mean, std) based on train split
         #   results are saved in self._scaling_params
-        self._calc_scaling_params(test_train_split[Split.TRAIN])
+        if not self._is_experimental:
+            self._calc_scaling_params(test_train_split[Split.TRAIN])
+        else:
+            if not self._scaling_params.size > 0:
+                raise AttributeError("[DataPreparation] For experimental data scaling params must be set in constructor!")
 
         self._prepared_data = {}
         for split, split_data in test_train_split.items():
@@ -507,13 +521,17 @@ class DataPreparation:
             ) as file:
                 pickle.dump(it_data, file)
 
+        self.save_dataset_metadata(self.save_dir)
+
+
+    def save_dataset_metadata(self, dir: str):
         self._scaling_params.to_json(
-            f"{self.save_dir}/scaling_params.json",
+            f"{dir}/scaling_params.json",
             index=False,
             orient="split",
         )
 
-        with open(f"{self.save_dir}/dataset_metadata.json", "w+", encoding="UTF-8") as f:
+        with open(f"{dir}/dataset_metadata.json", "w+", encoding="UTF-8") as f:
             f.write(
                 json.dumps(
                     {
@@ -526,7 +544,7 @@ class DataPreparation:
                 )
             )
 
-        with open(f"{self.save_dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
+        with open(f"{dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
             f.write(
                 json.dumps(
                     {"columns_for_training": COLUMNS_FOR_TRAINING}

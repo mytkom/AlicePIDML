@@ -38,7 +38,7 @@ class DomainAdaptationEngine(BaseEngine):
         if self._sim_data_prep._is_experimental:
             raise RuntimeError("DomainAdaptationEngine: Expected simulated data, but got experimental data in cfg.sim_dataset_paths!")
 
-        self._exp_data_prep = DataPreparation(cfg.data, cfg.exp_dataset_paths, cfg.seed)
+        self._exp_data_prep = DataPreparation(cfg.data, cfg.exp_dataset_paths, cfg.seed, scaling_params=self._sim_data_prep._scaling_params)
         (self._exp_train_dl, self._exp_val_dl, self._exp_test_dl) = self._exp_data_prep.create_dataloaders(
             batch_size={
                     Split.TRAIN: self._cfg.training.batch_size,
@@ -55,6 +55,8 @@ class DomainAdaptationEngine(BaseEngine):
         )
         if not self._exp_data_prep._is_experimental:
             raise RuntimeError("DomainAdaptationEngine: Expected experiments data, but got simulated data in cfg.exp_dataset_paths!")
+
+        self._sim_data_prep.save_dataset_metadata(self._base_dir)
 
 
     def train(self) -> TrainResults:
