@@ -1,7 +1,7 @@
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 from torch.functional import Tensor
 import torch
 from torch.nn.modules.loss import _Loss
@@ -515,6 +515,7 @@ class DomainAdaptationEngine(BaseEngine):
         domain_binary_predictions = final_domain_results["predictions"]
         domain_precision: float = float(precision_score(domain_binary_targets, domain_binary_predictions))
         domain_recall: float = float(recall_score(domain_binary_targets, domain_binary_predictions))
+        domain_accuracy: float = float(accuracy_score(domain_binary_targets, domain_binary_predictions))
         domain_f1 = float((domain_precision * domain_recall * 2) / (domain_precision + domain_recall + np.finfo(float).eps))
 
         # TODO: clean up return value
@@ -526,6 +527,7 @@ class DomainAdaptationEngine(BaseEngine):
             "test/loss": test_loss,
             "domain/f1": domain_f1,
             "domain/precision": domain_precision,
+            "domain/accuracy": domain_accuracy,
             "domain/recall": domain_recall,
         }, {
                 "class": final_class_results,
