@@ -170,7 +170,7 @@ class CombinedDataLoader(Generic[InT, OutT]):
         return sum(len(d) for d in self.dataloaders)
 
 
-def calculate_checksum(filenames: list[str], config: DataConfig, seed: int) -> str:
+def calculate_checksum(filenames: list[str], config: DataConfig, seed: int, scaling_params: Optional[pd.DataFrame] = None) -> str:
     """
     Calculate a checksum based on the contents of the given files, a config object and seed.
 
@@ -193,6 +193,8 @@ def calculate_checksum(filenames: list[str], config: DataConfig, seed: int) -> s
     # Serialize the config object to JSON and include it in the checksum
     dict_config = dataclasses.asdict(config)
     dict_config["seed"] = seed
+    if scaling_params is not None:
+        dict_config["scaling_params"] = scaling_params.to_dict()
     config_json = json.dumps(dict_config, sort_keys=True)
     hash.update(config_json.encode('utf-8'))
 
@@ -310,7 +312,7 @@ class DataPreparation:
 
         # Calculate checsum for input_paths' files, so caching results will be reliable and unique for this set of files
         self._log("Calculating input_paths + configuration checksum:")
-        self._inputs_checksum = calculate_checksum(input_paths, config, seed)
+        self._inputs_checksum = calculate_checksum(input_paths, config, seed, scaling_params)
         self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
         if scaling_params is not None:
