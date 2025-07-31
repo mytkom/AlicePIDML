@@ -117,7 +117,7 @@
     "sim_dataset_paths": [],
     "exp_dataset_paths": [],
     "project_dir": "project",
-    "log_dir": "logs",
+    "results_dir": "results",
     "mixed_precision": false,
     "seed": 0,
     "config_path": null

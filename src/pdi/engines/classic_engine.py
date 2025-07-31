@@ -18,6 +18,9 @@ from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
 class ClassicEngine(BaseEngine):
+    """
+    Classic engine is suitable for pytorch nn.Modules with standard training flow.
+    """
     def __init__(self, cfg: Config, target_code: int) -> None:
         super().__init__(cfg, target_code)
         self._data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)

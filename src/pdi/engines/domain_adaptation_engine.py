@@ -18,6 +18,10 @@ from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
 class DomainAdaptationEngine(BaseEngine):
+    """
+    Engine suitable for DANN (Domain Adversarial Neural Network) training. It handles both
+    simulated data and experimental data.
+    """
     def __init__(self, cfg: Config, target_code: int) -> None:
         super().__init__(cfg, target_code)
         self._sim_data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)

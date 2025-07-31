@@ -38,7 +38,7 @@ class BaseEngine:
         # It there are many runs on the same config, there
         # should be subdirectories with number for this run
         run_number = 1
-        project_target_path = os.path.join(cfg.log_dir, cfg.project_dir, TARGET_CODE_TO_PART_NAME[self._target_code])
+        project_target_path = os.path.join(cfg.results_dir, cfg.project_dir, TARGET_CODE_TO_PART_NAME[self._target_code])
         while os.path.exists(os.path.join(project_target_path, f"run_{run_number}")):
             run_number += 1
         os.makedirs(os.path.join(project_target_path, f"run_{run_number}"))
@@ -80,6 +80,9 @@ class BaseEngine:
             }, metadata_file, indent=4)
 
     def _load_model(self, skeleton_model: nn.Module, dirpath: Optional[str] = None) -> tuple[nn.Module, float]:
+        """
+        Loads weights for pytorch model from dirpath according to _save_best_model() file naming convention.
+        """
         if not dirpath:
             dirpath = os.path.join(self._base_dir, "model_weights")
         skeleton_model.load_state_dict(torch.load(os.path.join(dirpath, "best.pt"), weights_only=True))

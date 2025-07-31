@@ -117,7 +117,7 @@
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
     "exp_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
     "project_dir": "attention_dann_hyperparameter_tuning",
-    "log_dir": "results",
+    "results_dir": "results",
     "mixed_precision": false,
     "seed": 0,
     "config_path": null

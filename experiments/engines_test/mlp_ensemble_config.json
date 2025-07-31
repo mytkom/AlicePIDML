@@ -105,7 +105,7 @@
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
     "exp_dataset_paths": ["/home/mytkom/Documents/alice/preprocessed_datasets/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
     "project_dir": "engines_test",
-    "log_dir": "logs",
+    "results_dir": "results",
     "mixed_precision": false,
     "seed": 0,
     "config": null

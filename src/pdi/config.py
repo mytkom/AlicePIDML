@@ -28,10 +28,6 @@ class OutlierFilteringConfig:
 # - preprocessing
 # - splitting
 # - grouping
-# It is a commmon config for all data preparation class, desired model
-# will choose right data preparation class and use this config to
-# initialize it
-# TODO: idea, calculate checksum this config class and on the basis of such checksum cache preprocessed datasets in subdirectories
 @dataclasses.dataclass
 class DataConfig:
     # TODO: describe outlier filtering and options here
@@ -52,7 +48,6 @@ class AdamWConfig:
     # suboptimal value can degrade model performance, use it wisely
     weight_decay: float = 0.0
 
-# TODO: describe and fill parameters
 @dataclasses.dataclass
 class SGDConfig:
     momentum: float = 0.9
@@ -83,6 +78,8 @@ class PolynomialLRConfig:
 @dataclasses.dataclass
 class ConstantLRConfig:
     factor: float = 1.0
+
+    # Total iterations (epochs) for which factor will be applied
     total_iters: int = 50
 
 @dataclasses.dataclass
@@ -154,7 +151,7 @@ class TrainingConfig:
     # Status: It proved to be necessary on Run3 data, because of 70% TPC only observations
     undersample_missing_detectors: bool = True
 
-    # TODO: description
+    # In each missing detector group undersample (anti)pions to the next majority class
     undersample_pions: bool = True
 
 
@@ -163,7 +160,7 @@ def mlp_default_hidden_layers():
 
 @dataclasses.dataclass
 class MLPConfig:
-    # List of neurons in layer dimensions, first is input layer, then hidden layers, at the end output layer
+    # List of dimensions of hidden layers of MLP network (first and last layer are automatically set)
     hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # delete is equivalent complete-only data, mean fills missing cells with mean of this column
@@ -197,10 +194,11 @@ class AttentionConfig:
     embed_hidden: int = 128
     embed_dim: int = 32
 
+    # TODO: maybe it should be hidden_layers list of integers, why this network must be so shallow?
     # dimension of feed forward (MLP) neural network hidden layer
     ff_hidden: int = 128
 
-    # Pooling dimension of AttentionPulling module (see models.py for more details)
+    # Pooling dimension of AttentionPooling module (see models.py for more details)
     pool_hidden: int = 64
 
     # Number of heads in multi-head attention
@@ -217,7 +215,7 @@ class AttentionConfig:
 
 @dataclasses.dataclass
 class AttentionDANNConfig:
-    # list of hidden layers sizes (number of neurons in each layer) for domain classifier
+    # List of hidden layers sizes (number of neurons in each layer) for domain classifier
     dom_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # Standard Attention model configuration
@@ -238,11 +236,15 @@ class ModelConfig:
     # - attention: attention-based neural network, it can handle missing data by one-hot encoding of input
     # - attention_dann: attention-based neural network with domain adversarial neural network approach (domain classifier added)
     architecture: Literal["mlp", "ensemble", "attention", "attention_dann"] = "attention"
+
+    # Configurations of all architectures:
     mlp: MLPConfig = dataclasses.field(default_factory=MLPConfig)
     ensemble: EnsembleConfig = dataclasses.field(default_factory=EnsembleConfig)
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
     attention_dann: AttentionDANNConfig = dataclasses.field(default_factory=AttentionDANNConfig)
 
+    # TODO: not implemented yet, will be great to test more sophisticated multistage training
+    #   flows---like in TabICL
     # If you want to start training from some checkpoint, you can pass the path to the
     # directory with best.pt weights and metadata.json files of the model. Make sure to
     # set correct architecture for your weights.
@@ -280,7 +282,7 @@ class Config(JSONPyWizard):
     # simulated data, then probably, you do not need it
     exp_dataset_paths: List[str] = dataclasses.field(default_factory=list)
     project_dir: str = "project"
-    log_dir: str = "logs"
+    results_dir: str = "results"
     # Implemented float16 mixed precision using torch.autocast
     mixed_precision: bool = False
     seed: int = 0
