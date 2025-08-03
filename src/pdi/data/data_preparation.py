@@ -266,7 +266,7 @@ class DataPreparation:
         (Split.TRAIN/Split.VAL/Split.TEST): {
             GroupID: {
                 InputTarget.INPUT: pd.DataFrame with standardized input data,
-                InputTarget.TARGET: pd.DataFrame with target column (particle specie PDG code),
+                InputTarget.TARGET: pd.DataFrame with target column (particle species' PDG code),
                 InputTarget.UNSTANDARDIZED: pd.DataFrame with unstandardized input columns and nSigma columns (if available)
             }
         }
@@ -626,7 +626,7 @@ class DataPreparation:
         """
         Split dataset into train/validation/test splits. Their ratio is specified in DataConfig object
         in self._cfg. It uses sklearn's method for splitting. If it is simulated data, the split also
-        uses statify strategy by target codes. This way particle specie ratios should be the same in
+        uses statify strategy by target codes. This way particle species' ratios should be the same in
         the resulting splits.
         """
         train_to_val_ratio = self._cfg.train_size / (1 - self._cfg.test_size)

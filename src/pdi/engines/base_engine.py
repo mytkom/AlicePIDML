@@ -5,6 +5,8 @@ import json
 import os
 import pickle
 from typing import List, Optional
+from joblib.pool import np
+from numpy import float32
 from numpy.typing import NDArray
 from pandas.io.parsers.readers import csv
 from torch import nn
@@ -12,6 +14,7 @@ import torch
 import wandb
 from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.config import Config
+from pdi.data.constants import COLUMNS_FOR_TRAINING
 
 # (training losses array), (validation losses array)
 TrainResults = tuple[List[float], List[float]]
@@ -78,6 +81,18 @@ class BaseEngine:
                 "best_f1": str(self._best_f1),
                 "model_class": model.__class__.__name__,
             }, metadata_file, indent=4)
+
+        # Export ONNX
+        onnx_path = os.path.join(dirpath, "model.onnx")
+        dummy_input = torch.tensor(np.random.rand(1, len(COLUMNS_FOR_TRAINING)), dtype=torch.float32)
+        model_with_sigmoid = nn.Sequential(model, nn.Sigmoid())
+        torch.onnx.export(model_with_sigmoid, dummy_input, onnx_path,
+                          export_params=True,
+                          opset_version=14,
+                          do_constant_folding=True,
+                          input_names=["input"],
+                          output_names=["output"],
+                          dynamic_axes={"input": {0: 'batch size'}})
 
     def _load_model(self, skeleton_model: nn.Module, dirpath: Optional[str] = None) -> tuple[nn.Module, float]:
         """
