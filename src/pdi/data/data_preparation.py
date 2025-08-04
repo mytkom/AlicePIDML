@@ -218,8 +218,24 @@ def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
             - O2pidtracksmc - simulated data, more columns---it contains nSigma values,
             - O2pidtracksdataml - experimental data, only columns needed for training (no labels available)
             - O2pidtracksdata - experimental data, more columns---it contains nSigma values
+
+        Args:
+            input_files (List[str]): List of paths to ROOT files to be loaded.
+
+        Returns:
+            data_with_metadata (Tuple[pd.DataFrame, bool, bool]): 
+                - A pandas DataFrame containing the concatenated data from the ROOT files.
+                - A boolean indicating whether the data is experimental (True) or simulated (False).
+                - A boolean indicating whether the data is extended (True) or basic (False).
     """
+    MISSING_VALUE_INDICATORS = {
+        "fBeta": -999,
+        "fTOFSignal": -999,
+        "fTRDPattern": 0,
+        "fTRDSignal": 0
+    }
     TABLE_NAMES=["O2pidtracksmcml", "O2pidtracksmc", "O2pidtracksdataml", "O2pidtracksdata"]
+
     table_name: str | None = None
     dataframes = []
     for input_file in input_files:
@@ -242,7 +258,20 @@ def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
                 tree_data = file[f"%s/{table_name}" % (dirname)].pandas.df()
                 dataframes.append(tree_data)
 
-    return pd.concat(dataframes, ignore_index=True), is_experimental_data(table_name), is_extended_data(table_name)
+    data = pd.concat(dataframes, ignore_index=True)
+
+    # When there is no detector value in data, some special values indicating missing values
+    # are returned from PIDMLProducer task of O2Physics (e.g. -999.0.). This method sets such values to NaNs.
+    for column, val in MISSING_VALUE_INDICATORS.items():
+        data.loc[data[column] == val, column] = np.NaN
+
+    # TRDPattern is uint8, so cannot use NaN in producer -> need to preprocess it here
+    data["fTRDPattern"].mask(np.isclose(data["fTRDPattern"], 0), inplace=True)
+    data.loc[data["fTRDPattern"].isnull(), ["fTRDSignal", "fTRDPattern"]] = np.NaN
+    data.loc[data["fBeta"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
+    data.loc[data["fTOFSignal"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
+
+    return data, is_experimental_data(table_name), is_extended_data(table_name)
 
 PreparedData = dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]]
 
@@ -278,7 +307,7 @@ class DataPreparation:
         - "columns_for_training.json" with array of column labels ordered the same way during training and inference.
         - "scaling_params.json" with standardization params calculated on train dataset.
 
-    DataPreparation contains member constants: COLUMNS_TO_SCAL_RUN_{run number} and MISSING_VALUE_INDICATORS, which can be
+    DataPreparation contains member constants: COLUMNS_TO_SCAL_RUN_{run number}, which can be
     configured to change the behaviour of the class.
     """
 
@@ -290,14 +319,6 @@ class DataPreparation:
 
     # TRDSignal scaling in run2
     COLUMNS_TO_SCALE_RUN_2 = COLUMNS_TO_SCALE_RUN_3 + ["fTRDSignal"]
-
-
-    MISSING_VALUE_INDICATORS = {
-        "fBeta": -999,
-        "fTOFSignal": -999,
-        "fTRDPattern": 0,
-        "fTRDSignal": 0
-    }
 
     def __init__(
             self,
@@ -340,10 +361,6 @@ class DataPreparation:
         # such unique observation raises an error at some point in the code.
         if not self._is_experimental:
             data = self._delete_unique_targets(data)
-
-        # When there is no detector value in data, some special values indicating missing values
-        # are returned from PIDMLProducer task of O2Physics (e.g. -999.0.). This method sets such values to NaNs.
-        data = self._make_missing_null(data)
 
         # TOF is not reliable for transverse momentum (fPt) lower than PT_CUT,
         # TPC was returning outliers (10M signal value), which were bad for standardization parameters
@@ -582,26 +599,6 @@ class DataPreparation:
         for target, count in target_counts.items():
             if count < THRESHOLD:
                 data = data.loc[data[TARGET_COLUMN] != target, :]
-        return data
-
-    def _make_missing_null(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Fill special missing value indicators with NaNs in provided data DataFrame.
-        """
-        for column, val in self.MISSING_VALUE_INDICATORS.items():
-            data.loc[data[column] == val, column] = np.NaN
-
-        # TODO: check why is it needed to distinguish between Run2 and Run3 here?
-        if self._cfg.is_run_3:
-            # TRDPattern is uint8, so cannot use NaN in producer -> need to preprocess it here
-            data["fTRDPattern"].mask(np.isclose(data["fTRDPattern"], 0), inplace=True)
-            data.loc[data["fTRDPattern"].isnull(), ["fTRDSignal", "fTRDPattern"]] = np.NaN
-            data.loc[data["fBeta"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
-            data.loc[data["fTOFSignal"].isnull(), ["fTOFSignal", "fBeta"]] = np.NaN
-            self._log("Run 3 missing values applied!")
-        else:
-            self._log("Run 2 missing values applied!")
-
         return data
 
     def _perform_cuts(self, data: pd.DataFrame) -> pd.DataFrame:

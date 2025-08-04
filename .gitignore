@@ -9,3 +9,4 @@ wandb
 pdiVEnv/*
 .venv
 results
+eda_results

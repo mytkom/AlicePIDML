@@ -14,42 +14,36 @@ from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-from pdi.constants import TARGET_CODE_TO_PART_NAME
-from pdi.data.constants import TARGET_COLUMN
-from pdi.data.detector_helpers import detector_unmask
-from pdi.data.types import Additional, InputTarget, Split
-from pdi.data.utils import GroupedDataPreparation
-
-def plot_particle_distribution(
-    target_code: int,
-    prep: GroupedDataPreparation,
-    splits: list[Split],
-    x_axis: str,
-    name: str = None,
-    save_dir: str = None,
-):
-    groups = prep.grouped_it
-    bins = np.linspace(0, 5, 100)
-    for split in splits:
-        labels = []
-        for gid, group in groups.items():
-            targets = group[split][InputTarget.TARGET]
-            targets = pd.DataFrame(targets, columns=[TARGET_COLUMN])
-            group_add = prep.grouped_add[gid][split][Additional[x_axis]]
-            x_values = group_add[targets[TARGET_COLUMN] == target_code]
-            counts, bins = np.histogram(x_values, bins=bins)
-            detectors = detector_unmask(gid)
-            detectors = [d.name for d in detectors]
-            detectors_label = ",".join(detectors)
-            plt.plot(bins[:-1], counts)
-            labels.append(f"Available detectors: {detectors_label}")
-        plt.title(f"Distribution of {TARGET_CODE_TO_PART_NAME[target_code]}")
-        plt.xlabel(x_axis)
-        plt.ylabel("Count")
-        plt.legend(labels, loc="upper right")
-        plt.savefig(f"{save_dir}/{name}_{split}.png")
-        plt.show()
-        plt.close()
+# def plot_particle_distribution(
+#     target_code: int,
+#     prep: GroupedDataPreparation,
+#     splits: list[Split],
+#     x_axis: str,
+#     name: str = None,
+#     save_dir: str = None,
+# ):
+#     groups = prep.grouped_it
+#     bins = np.linspace(0, 5, 100)
+#     for split in splits:
+#         labels = []
+#         for gid, group in groups.items():
+#             targets = group[split][InputTarget.TARGET]
+#             targets = pd.DataFrame(targets, columns=[TARGET_COLUMN])
+#             group_add = prep.grouped_add[gid][split][Additional[x_axis]]
+#             x_values = group_add[targets[TARGET_COLUMN] == target_code]
+#             counts, bins = np.histogram(x_values, bins=bins)
+#             detectors = detector_unmask(gid)
+#             detectors = [d.name for d in detectors]
+#             detectors_label = ",".join(detectors)
+#             plt.plot(bins[:-1], counts)
+#             labels.append(f"Available detectors: {detectors_label}")
+#         plt.title(f"Distribution of {TARGET_CODE_TO_PART_NAME[target_code]}")
+#         plt.xlabel(x_axis)
+#         plt.ylabel("Count")
+#         plt.legend(labels, loc="upper right")
+#         plt.savefig(f"{save_dir}/{name}_{split}.png")
+#         plt.show()
+#         plt.close()
 
 def plot_cor_matrix(df: pd.DataFrame, title: str) -> Figure:
     """
@@ -126,7 +120,7 @@ def plot_and_save_beeswarm(result, save_dir: str, file_name: str, title: str):
 
 def generate_figure_thumbnails_from_iterator(
     figure_iter: Iterator[Tuple[Figure, str]],
-    save_path: str,
+    save_path: str | None = None,
     thumbnail_width: int = 300
 ) -> HTML:
     """
@@ -142,9 +136,10 @@ def generate_figure_thumbnails_from_iterator(
     thumbnails = []
 
     for fig, filename in figure_iter:
-        filepath = os.path.abspath(os.path.join(save_path, filename))
         # Save full-size figure
-        fig.savefig(filepath, dpi=300, bbox_inches='tight')
+        if save_path:
+            filepath = os.path.abspath(os.path.join(save_path, filename))
+            fig.savefig(filepath, dpi=300, bbox_inches='tight')
 
         # Save to buffer for thumbnail
         buf = BytesIO()
@@ -325,8 +320,8 @@ def plot_feature_histogram2d_combinations(
 def plot_feature_combinations(
     data: pd.DataFrame,
     features: Union[list[str], list[Tuple[str, str]]],
-    condition: np.ndarray = None,
-    condition_legend: Tuple[str, str] = None,
+    condition: np.ndarray | None = None,
+    condition_legend: Tuple[str, str] | None = None,
     title_template: str = "Scatter Plot of {feature1} vs {feature2}",
     size: float = 0.8,
     alpha: float = 0.5,
