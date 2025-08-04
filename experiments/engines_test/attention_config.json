@@ -69,10 +69,23 @@
             "dropout": 0.9
         },
         "attention": {
-            "embed_hidden": 128,
+            "embed_hidden_layers": [
+                64,
+                32,
+                16
+            ],
             "embed_dim": 32,
-            "ff_hidden": 128,
-            "pool_hidden": 64,
+            "encoder_ff_hidden": 128,
+            "mlp_hidden_layers": [
+                64,
+                32,
+                16
+            ],
+            "pool_hidden_layers": [
+                64,
+                32,
+                16
+            ],
             "num_heads": 2,
             "num_blocks": 2,
             "activation": "ReLU",
@@ -85,10 +98,23 @@
                 16
             ],
             "attention": {
-                "embed_hidden": 128,
+                "embed_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
                 "embed_dim": 32,
-                "ff_hidden": 128,
-                "pool_hidden": 64,
+                "encoder_ff_hidden": 128,
+                "mlp_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
+                "pool_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
                 "num_heads": 2,
                 "num_blocks": 2,
                 "activation": "ReLU",

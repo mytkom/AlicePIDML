@@ -104,7 +104,7 @@ class BaseEngine:
         with open(os.path.join(dirpath, f"metadata.json"), "r") as metadata_file:
             metadata = json.load(metadata_file)
 
-        return skeleton_model, metadata["threshold"]
+        return skeleton_model, float(metadata["threshold"])
 
     # returns if progress was made
     def _early_stopping_step(self, model: nn.Module, threshold: float, epoch: int, val_loss: float, min_loss: float, val_f1: float) -> bool:

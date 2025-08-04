@@ -29,10 +29,10 @@
                         0.6
                       ]
                     },
-                    "embed_hidden": {
+                    "embed_hidden_layers": {
                       "values": [
-                        128,
-                        256
+                        [64,32,16],
+                        [128,256,256,128,64]
                       ]
                     },
                     "embed_dim": {
@@ -41,16 +41,22 @@
                         64
                       ]
                     },
-                    "ff_hidden": {
+                    "mlp_hidden_layers": {
+                      "values": [
+                        [64,32,16],
+                        [128,256,256,128,64]
+                      ]
+                    },
+                    "encoder_ff_hidden": {
                       "values": [
                         128,
                         256
                       ]
                     },
-                    "pool_hidden": {
+                    "pool_hidden_layers": {
                       "values": [
-                        64,
-                        128
+                        [64,32,16],
+                        [128,256,256,128,64]
                       ]
                     },
                     "num_heads": {

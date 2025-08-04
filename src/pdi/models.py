@@ -44,10 +44,11 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     elif cfg.architecture == "attention":
         return AttentionModel(
             in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
-            embed_hidden=cfg.attention.embed_hidden,
+            embed_hidden_layers=cfg.attention.embed_hidden_layers,
             embed_dim=cfg.attention.embed_dim,
-            ff_hidden=cfg.attention.ff_hidden,
-            pool_hidden=cfg.attention.pool_hidden,
+            ff_hidden_layers=cfg.attention.mlp_hidden_layers,
+            encoder_ff_hidden=cfg.attention.encoder_ff_hidden,
+            pool_hidden_layers=cfg.attention.pool_hidden_layers,
             num_heads=cfg.attention.num_heads,
             num_blocks=cfg.attention.num_blocks,
             activation=ACTIVATIONS[cfg.attention.activation],
@@ -56,10 +57,11 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     elif cfg.architecture == "attention_dann":
         return AttentionModelDANN(
             in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
-            embed_hidden=cfg.attention_dann.attention.embed_hidden,
-            embed_dim=cfg.attention_dann.attention.embed_dim,
-            ff_hidden=cfg.attention_dann.attention.ff_hidden,
-            pool_hidden=cfg.attention_dann.attention.pool_hidden,
+            embed_hidden_layers=cfg.attention.embed_hidden_layers,
+            embed_dim=cfg.attention.embed_dim,
+            ff_hidden_layers=cfg.attention.mlp_hidden_layers,
+            encoder_ff_hidden=cfg.attention.encoder_ff_hidden,
+            pool_hidden_layers=cfg.attention.pool_hidden_layers,
             num_heads=cfg.attention_dann.attention.num_heads,
             num_blocks=cfg.attention_dann.attention.num_blocks,
             dom_hidden_layers=cfg.attention_dann.dom_hidden_layers,
@@ -150,9 +152,9 @@ class AttentionModel(nn.Module):
     """AttentionModel is an attention-based model used for processing incomplete examples."""
 
     class _AttentionPooling(nn.Module):
-        def __init__(self, in_dim: int, pool_dim: int, activation: type[nn.Module]):
+        def __init__(self, in_dim: int, pool_dim: List[int], activation: type[nn.Module]):
             super().__init__()
-            self.net = NeuralNet([in_dim, pool_dim, in_dim], activation)
+            self.net = NeuralNet([in_dim, *pool_dim, in_dim], activation)
             self.softmax = nn.Softmax(dim=1)
 
         def forward(self, x):
@@ -189,10 +191,11 @@ class AttentionModel(nn.Module):
     def __init__(
         self,
         in_dim: int,
-        embed_hidden: int,
+        embed_hidden_layers: List[int],
         embed_dim: int,
-        ff_hidden: int,
-        pool_hidden: int,
+        encoder_ff_hidden: int,
+        ff_hidden_layers: List[int],
+        pool_hidden_layers: List[int],
         num_heads: int,
         num_blocks: int,
         activation: type[nn.Module] = nn.ReLU,
@@ -213,16 +216,16 @@ class AttentionModel(nn.Module):
         """
         super().__init__()
         self.to_feature_set = AttentionModel._VecToMat()
-        self.emb = NeuralNet([in_dim, embed_hidden, embed_dim], activation)
+        self.emb = NeuralNet([in_dim, *embed_hidden_layers, embed_dim], activation)
         self.drop = nn.Dropout(dropout)
         encoder_layer = nn.TransformerEncoderLayer(
-            embed_dim, num_heads, ff_hidden, dropout, activation(), batch_first=True
+            embed_dim, num_heads, encoder_ff_hidden, dropout, activation(), batch_first=True
         )
         self.encoder = nn.TransformerEncoder(
             encoder_layer, num_blocks, enable_nested_tensor=False
         )
-        self.pool = AttentionModel._AttentionPooling(embed_dim, pool_hidden, activation)
-        self.net = NeuralNet([embed_dim, pool_hidden, 1], activation)
+        self.pool = AttentionModel._AttentionPooling(embed_dim, pool_hidden_layers, activation)
+        self.net = NeuralNet([embed_dim, *ff_hidden_layers, 1], activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.to_feature_set(x)
@@ -256,10 +259,11 @@ class AttentionModelDANN(AttentionModel):
     def __init__(
         self,
         in_dim: int,
-        embed_hidden: int,
+        embed_hidden_layers: List[int],
         embed_dim: int,
-        ff_hidden: int,
-        pool_hidden: int,
+        encoder_ff_hidden: int,
+        ff_hidden_layers: List[int],
+        pool_hidden_layers: List[int],
         num_heads: int,
         num_blocks: int,
         dom_hidden_layers: List[int],
@@ -268,7 +272,7 @@ class AttentionModelDANN(AttentionModel):
         alpha: float = 1.0,
     ):
         super().__init__(
-            in_dim, embed_hidden, embed_dim, ff_hidden, pool_hidden, num_heads, num_blocks, activation, dropout
+            in_dim, embed_hidden_layers, embed_dim, encoder_ff_hidden, ff_hidden_layers, pool_hidden_layers, num_heads, num_blocks, activation, dropout
         )
         # TODO: should I use different architecture for the domain classifier? I should do sweeps to find out.
         self.domain_classifier = NeuralNet([embed_dim, *dom_hidden_layers, 1], activation)

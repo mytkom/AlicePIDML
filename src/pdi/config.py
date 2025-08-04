@@ -191,15 +191,14 @@ class EnsembleConfig:
 @dataclasses.dataclass
 class AttentionConfig:
     # Embedding dimension and hidden dimension for MLP doing preliminary embedding settings
-    embed_hidden: int = 128
+    embed_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
     embed_dim: int = 32
 
-    # TODO: maybe it should be hidden_layers list of integers, why this network must be so shallow?
-    # dimension of feed forward (MLP) neural network hidden layer
-    ff_hidden: int = 128
+    encoder_ff_hidden: int = 128
+    mlp_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # Pooling dimension of AttentionPooling module (see models.py for more details)
-    pool_hidden: int = 64
+    pool_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
 
     # Number of heads in multi-head attention
     num_heads: int = 2
@@ -290,6 +289,8 @@ class Config(JSONPyWizard):
 
 @dataclasses.dataclass
 class OneParticleConfig:
+    # If to run evaluation on test dataset and save results after training
+    test: bool = True
     config: Optional[str] = None
     particle: Literal["pion", "kaon", "proton", "antipion", "antikaon", "antiproton"] = "pion"
 
@@ -299,6 +300,8 @@ class AllParticlesConfig:
     # It can be used for example to test all particle species training on single config
     # or to do so with most of the species, but overwrite e.g. pions.
     all: Optional[str] = None
+    # If to run evaluation on test dataset and save results after training
+    test: bool = True
 
     pion: Optional[str] = None
     kaon: Optional[str] = None

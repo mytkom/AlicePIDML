@@ -207,7 +207,7 @@ class DomainAdaptationEngine(BaseEngine):
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
                 sim_out: Tensor = model(sim_inputs)
                 sim_class_out = sim_out[:,0].unsqueeze(dim=1)
@@ -302,7 +302,7 @@ class DomainAdaptationEngine(BaseEngine):
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
                 sim_out = model(sim_inputs)
                 sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
@@ -448,7 +448,7 @@ class DomainAdaptationEngine(BaseEngine):
 
             sim_binary_targets = (sim_targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
                 sim_out = model(sim_inputs)
                 sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
@@ -468,13 +468,13 @@ class DomainAdaptationEngine(BaseEngine):
             test_loss += loss.item()
             count += 1
 
-            predict_class_binary = torch.sigmoid(sim_class_out) >= threshold
-            class_results["predictions"].extend(predict_class_binary.cpu().detach().numpy())
+            predict_class = torch.sigmoid(sim_class_out)
+            class_results["predictions"].extend(predict_class.cpu().detach().numpy())
 
-            predict_domain_binary = torch.sigmoid(torch.cat((sim_domain_out, exp_domain_out), dim=0)) >= DOMAIN_CLASSIFIER_THRESHOLD
+            predict_domain = torch.sigmoid(torch.cat((sim_domain_out, exp_domain_out), dim=0))
             domain_targets = torch.cat((torch.zeros_like(sim_domain_out), torch.ones_like(exp_domain_out)), dim=0)
             domain_results["targets"].extend(domain_targets.cpu().detach().numpy())
-            domain_results["predictions"].extend(predict_domain_binary.cpu().detach().numpy())
+            domain_results["predictions"].extend(predict_domain.cpu().detach().numpy())
 
             del exp_out
             del sim_inputs
@@ -502,7 +502,7 @@ class DomainAdaptationEngine(BaseEngine):
         test_loss = test_loss / count
 
         binary_targets = final_class_results["targets"] == self._target_code
-        binary_predictions = final_class_results["predictions"]
+        binary_predictions = final_class_results["predictions"] >= threshold
         test_precision: float = float(precision_score(binary_targets, binary_predictions))
         test_recall: float = float(recall_score(binary_targets, binary_predictions))
         test_f1 = float((test_precision * test_recall * 2) / (test_precision + test_recall + np.finfo(float).eps))
@@ -516,7 +516,7 @@ class DomainAdaptationEngine(BaseEngine):
         }
 
         domain_binary_targets = final_domain_results["targets"] == self._target_code
-        domain_binary_predictions = final_domain_results["predictions"]
+        domain_binary_predictions = final_domain_results["predictions"] >= DOMAIN_CLASSIFIER_THRESHOLD
         domain_precision: float = float(precision_score(domain_binary_targets, domain_binary_predictions))
         domain_recall: float = float(recall_score(domain_binary_targets, domain_binary_predictions))
         domain_accuracy: float = float(accuracy_score(domain_binary_targets, domain_binary_predictions))

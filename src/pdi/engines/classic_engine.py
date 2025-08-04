@@ -165,7 +165,7 @@ class ClassicEngine(BaseEngine):
             input_data = input_data.to(self._cfg.training.device)
             binary_targets = (targets == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 out = model(input_data)
                 loss = loss_func(out, binary_targets)
 
@@ -225,7 +225,7 @@ class ClassicEngine(BaseEngine):
             input_data = input_data.to(self._cfg.training.device)
             binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 out = model(input_data)
                 loss = loss_func(out, binary_target)
 
@@ -274,7 +274,7 @@ class ClassicEngine(BaseEngine):
             input_data = input_data.to(self._cfg.training.device)
             binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16 if self._cfg.mixed_precision else torch.float32):
+            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
                 out = model(input_data)
                 loss = loss_func(out, binary_target)
 
@@ -312,7 +312,7 @@ class ClassicEngine(BaseEngine):
         val_loss = val_loss / count
 
         binary_targets = results["targets"] == self._target_code
-        binary_predictions = torch.sigmoid(results["predictions"]) >= threshold
+        binary_predictions = results["predictions"] >= threshold
         test_precision: float = float(precision_score(binary_targets, binary_predictions))
         test_recall: float = float(recall_score(binary_targets, binary_predictions))
         test_f1 = float((test_precision * test_recall * 2) / (test_precision + test_recall + np.finfo(float).eps))
