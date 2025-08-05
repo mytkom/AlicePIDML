@@ -1,7 +1,6 @@
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
-from sklearn.metrics import accuracy_score, precision_score, recall_score
 from torch.functional import Tensor
 import torch
 from torch.nn.modules.loss import _Loss
@@ -10,8 +9,7 @@ from tqdm import tqdm
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, DataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID, Split
-from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
-from pdi.evaluate import maximize_f1
+from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults, ValidationMetrics, TestMetrics
 from pdi.losses import build_loss
 from pdi.models import build_model
 from pdi.optimizers import build_optimizer
@@ -100,7 +98,7 @@ class DomainAdaptationEngine(BaseEngine):
 
             if epoch % self._cfg.validation.validate_every == 0:
                 # Validation
-                val_metrics = self._evaluate(
+                class_val_metrics, domain_val_metrics = self._evaluate(
                     model=model,
                     loss_func_class=loss_func_class,
                     loss_func_domain=loss_func_domain,
@@ -110,18 +108,18 @@ class DomainAdaptationEngine(BaseEngine):
 
                 # Threshold for posterior probability to identify as positive
                 # it is optimized for f1 metric
-                model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
+                model.thres = torch.tensor(np.array(class_val_metrics.threshold)).to(self._cfg.training.device)
 
-                val_loss = val_metrics['val/loss']
-                val_loss_arr.append(val_metrics['val/loss'])
+                val_loss = class_val_metrics.loss
+                val_loss_arr.append(val_loss)
 
                 self._early_stopping_step(
                     model=model,
-                    threshold=val_metrics["val/threshold"],
+                    threshold=class_val_metrics.threshold,
                     epoch=epoch,
                     val_loss=val_loss,
                     min_loss=min_loss,
-                    val_f1=val_metrics["val/f1"],
+                    val_f1=class_val_metrics.f1,
                 )
                 if  val_loss < min_loss:
                     min_loss = val_loss
@@ -132,12 +130,13 @@ class DomainAdaptationEngine(BaseEngine):
                         "epoch": epoch,
                         "scheduled_lr": scheduler.get_last_lr()[0],
                         "val/f1_best": self._best_f1,
-                        **val_metrics,
+                        **{f"val/{k}": v for k,v in class_val_metrics.to_dict().items()},
+                        **{f"val/domain/{k}": v for k,v in domain_val_metrics.to_dict().items()},
                     },
                     csv_name = f"validation_metrics.csv"
                 )
                 print(
-                    f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
+                    f"Epoch: {epoch}, F1: {class_val_metrics.f1:.4f}, Domain F1: {domain_val_metrics.f1:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
                 )
 
                 if self._should_early_stop():
@@ -146,7 +145,7 @@ class DomainAdaptationEngine(BaseEngine):
 
         self._model = model
 
-        return loss_arr, val_loss_arr
+        return TrainResults(train_losses=loss_arr, val_losses=val_loss_arr)
 
     def test(self, model_dirpath: Optional[str] = None) -> TestResults:
         loss_class: _Loss = build_loss(self._cfg.training)
@@ -155,7 +154,7 @@ class DomainAdaptationEngine(BaseEngine):
         model, threshold = self._load_model(model, model_dirpath)
         model.to(self._cfg.training.device)
 
-        metrics, results = self._test(
+        class_results, domain_results = self._test(
             model=model,
             threshold=threshold,
             loss_func_class=loss_class,
@@ -164,12 +163,16 @@ class DomainAdaptationEngine(BaseEngine):
             exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_test_dl),
         )
 
-        self._log_results(metrics, csv_name=f"test_metrics.csv")
-        self._save_test_results(results["class"], filename="test_prediction_results_class_labels")
-        self._save_test_results(results["domain"], filename="test_prediction_results_class_domain")
+        self._log_results({f"test/{k}": v for k,v in class_results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
+        self._log_results({f"test/domain/{k}": v for k,v in domain_results.test_metrics.to_dict().items()}, csv_name=f"test_domain_metrics.csv")
 
-        print(metrics)
-        return metrics, results
+        print("Class label test results:")
+        print(class_results.test_metrics.to_dict())
+        print("Domain label test results:")
+        print(domain_results.test_metrics.to_dict())
+
+        # To handle common interface, only class label results are returned
+        return class_results
 
     def _train_one_epoch(
             self,
@@ -258,7 +261,6 @@ class DomainAdaptationEngine(BaseEngine):
 
         return final_loss / count
 
-    # TODO: clean up this---for sure common behaviour can be extracted
     def _evaluate(
             self,
             model: torch.nn.Module,
@@ -266,7 +268,7 @@ class DomainAdaptationEngine(BaseEngine):
             loss_func_domain: _Loss,
             sim_dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut],
             exp_dataloader: CombinedDataLoader[ExpBatchItem, ExpBatchItemOut],
-    ) -> dict[str, float]:
+    ) -> tuple[ValidationMetrics, ValidationMetrics]:
         model.eval()
 
         class_results = {
@@ -338,41 +340,23 @@ class DomainAdaptationEngine(BaseEngine):
         if count == 0:
             count = 1
 
-        # TODO: maybe it should be a DataFrame?
-        # Final data, predicted posterior probabilities and their corresponding input tensors,
-        # target codes and unstandardized columns
-        final_class_results = {
-            "targets": np.array(class_results["targets"], dtype=np.float32).squeeze(),
-            "predictions": np.array(class_results["predictions"]).squeeze(),
-        }
 
+        # Common loss
         val_loss = val_loss / count
 
-        binary_targets = final_class_results["targets"] == self._target_code
-        val_f1, val_prec, val_rec, var_thres = maximize_f1(binary_targets, final_class_results["predictions"])
+        # Class label classification
+        squeezed_binary_targets_class = np.array(class_results["targets"], dtype=np.float32).squeeze() == self._target_code
+        squeezed_predictions_class = np.array(class_results["predictions"]).squeeze()
+        class_validation_metrics = ValidationMetrics(squeezed_binary_targets_class, squeezed_predictions_class, val_loss)
 
-        final_domain_results = {
-            "targets": np.array(domain_results["targets"], dtype=np.float32).squeeze(),
-            "predictions": np.array(domain_results["predictions"]).squeeze(),
-        }
-        # TODO: make constant threshold, add accuracy
-        dom_val_f1, dom_val_prec, dom_val_rec, dom_var_thres = maximize_f1(final_domain_results["targets"], final_domain_results["predictions"])
+        # Domain label classification
+        squeezed_binary_targets_domain = np.array(domain_results["targets"], dtype=np.float32).squeeze()
+        squeezed_predictions_domain = np.array(domain_results["predictions"]).squeeze()
+        domain_validation_metrics = ValidationMetrics(squeezed_binary_targets_domain, squeezed_predictions_domain, val_loss)
 
-        # TODO: clean up return value
-        return {
-            "val/f1": val_f1,
-            "val/precision": val_prec,
-            "val/recall": val_rec,
-            "val/threshold": var_thres,
-            "val/loss": val_loss,
-            "domain/f1": dom_val_f1,
-            "domain/precision": dom_val_prec,
-            "domain/recall": dom_val_rec,
-            "domain/optimal_threshold": dom_var_thres,
-        }
+        return class_validation_metrics, domain_validation_metrics
 
 
-    # TODO: clean up this---for sure common behaviour can be extracted
     def _test(
             self,
             model: torch.nn.Module,
@@ -381,7 +365,7 @@ class DomainAdaptationEngine(BaseEngine):
             loss_func_domain: _Loss,
             sim_dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut],
             exp_dataloader: CombinedDataLoader[ExpBatchItem, ExpBatchItemOut],
-    ) -> tuple[dict, dict]:
+    ) -> tuple[TestResults, TestResults]:
         DOMAIN_CLASSIFIER_THRESHOLD=0.5
 
         model.eval()
@@ -488,53 +472,42 @@ class DomainAdaptationEngine(BaseEngine):
         if count == 0:
             count = 1
 
-        # TODO: maybe it should be a DataFrame?
-        # Final data, predicted posterior probabilities and their corresponding input tensors,
-        # target codes and unstandardized columns
-        final_class_results = {
-            "inputs": np.array(class_results["inputs"]).squeeze(),
-            "targets": np.array(class_results["targets"], dtype=np.float32).squeeze(),
-            "predictions": np.array(class_results["predictions"]).squeeze(),
-            "gids": np.array(class_results["gids"]).squeeze(),
-            **{k: np.array(v).squeeze() for k, v in class_results["unstandardized"].items()}
-        }
-
+        # Common test loss
         test_loss = test_loss / count
 
-        binary_targets = final_class_results["targets"] == self._target_code
-        binary_predictions = final_class_results["predictions"] >= threshold
-        test_precision: float = float(precision_score(binary_targets, binary_predictions))
-        test_recall: float = float(recall_score(binary_targets, binary_predictions))
-        test_f1 = float((test_precision * test_recall * 2) / (test_precision + test_recall + np.finfo(float).eps))
+        # Class classification
+        squeezed_targets_class = np.array(class_results["targets"], dtype=np.float32).squeeze()
+        squeezed_predictions_class = np.array(class_results["predictions"]).squeeze()
 
-        final_domain_results = {
-            "inputs": np.array(domain_results["inputs"]).squeeze(),
-            "targets": np.array(domain_results["targets"], dtype=np.float32).squeeze(),
-            "predictions": np.array(domain_results["predictions"]).squeeze(),
-            "gids": np.array(domain_results["gids"]).squeeze(),
-            **{k: np.array(v).squeeze() for k, v in domain_results["unstandardized"].items()}
-        }
+        class_test_results = TestResults(
+            inputs=np.array(class_results["inputs"]).squeeze(),
+            targets=squeezed_targets_class,
+            predictions=squeezed_predictions_class,
+            unstandardized={k: np.array(v).squeeze() for k, v in class_results["unstandardized"].items()},
+            test_metrics=TestMetrics(
+                targets=squeezed_targets_class,
+                predictions=squeezed_predictions_class,
+                threshold=threshold,
+                target_code=self._target_code,
+                loss=test_loss,
+            ),
+        )
 
-        domain_binary_targets = final_domain_results["targets"] == self._target_code
-        domain_binary_predictions = final_domain_results["predictions"] >= DOMAIN_CLASSIFIER_THRESHOLD
-        domain_precision: float = float(precision_score(domain_binary_targets, domain_binary_predictions))
-        domain_recall: float = float(recall_score(domain_binary_targets, domain_binary_predictions))
-        domain_accuracy: float = float(accuracy_score(domain_binary_targets, domain_binary_predictions))
-        domain_f1 = float((domain_precision * domain_recall * 2) / (domain_precision + domain_recall + np.finfo(float).eps))
+        # Domain classification
+        squeezed_targets_domain = np.array(domain_results["targets"], dtype=np.float32).squeeze()
+        squeezed_predictions_domain = np.array(domain_results["predictions"]).squeeze()
+        domain_test_results = TestResults(
+            inputs=np.array(domain_results["inputs"]).squeeze(),
+            targets=squeezed_targets_domain,
+            predictions=squeezed_predictions_domain,
+            unstandardized={k: np.array(v).squeeze() for k, v in domain_results["unstandardized"].items()},
+            test_metrics=TestMetrics(
+                targets=squeezed_targets_domain,
+                predictions=squeezed_predictions_domain,
+                threshold=DOMAIN_CLASSIFIER_THRESHOLD,
+                target_code=self._target_code,
+                loss=test_loss,
+            ),
+        )
 
-        # TODO: clean up return value
-        return {
-            "test/f1": test_f1,
-            "test/precision": test_precision,
-            "test/recall": test_recall,
-            "test/threshold": threshold,
-            "test/loss": test_loss,
-            "domain/f1": domain_f1,
-            "domain/precision": domain_precision,
-            "domain/accuracy": domain_accuracy,
-            "domain/recall": domain_recall,
-        }, {
-                "class": final_class_results,
-                "domain": final_domain_results,
-        }
-
+        return class_test_results, domain_test_results

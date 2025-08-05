@@ -1,7 +1,6 @@
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
-from sklearn.metrics import precision_score, recall_score
 import torch
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -9,8 +8,7 @@ from tqdm import tqdm
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, DataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID, Split
-from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults
-from pdi.evaluate import maximize_f1
+from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults, ValidationMetrics, TestMetrics
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
 from pdi.losses import build_loss
 from pdi.models import build_model
@@ -94,17 +92,17 @@ class ClassicEngine(BaseEngine):
 
                 # Threshold for posterior probability to identify as positive
                 # it is optimized for f1 metric
-                model.thres = torch.tensor(np.array(val_metrics["val/threshold"])).to(self._cfg.training.device)
+                model.thres = torch.tensor(np.array(val_metrics.threshold)).to(self._cfg.training.device)
 
-                val_loss = val_metrics["val/loss"]
+                val_loss = val_metrics.loss
                 val_loss_arr.append(val_loss)
 
                 self._early_stopping_step(
                     model=model,
-                    threshold=val_metrics["val/threshold"],
+                    threshold=val_metrics.threshold,
                     val_loss=val_loss,
                     min_loss=min_loss,
-                    val_f1=val_metrics["val/f1"],
+                    val_f1=val_metrics.f1,
                     epoch=epoch,
                 )
                 if  val_loss < min_loss:
@@ -116,19 +114,19 @@ class ClassicEngine(BaseEngine):
                         "epoch": epoch,
                         "scheduled_lr": scheduler.get_last_lr()[0],
                         "val/f1_best": self._best_f1,
-                        **val_metrics,
+                        **{f"val/{k}": v for k,v in val_metrics.to_dict().items()},
                     },
                     csv_name = f"validation_metrics.csv"
                 )
                 print(
-                    f"Epoch: {epoch}, F1: {val_metrics['val/f1']:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
+                    f"Epoch: {epoch}, F1: {val_metrics.f1:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
                 )
 
                 if self._should_early_stop():
                     print(f"Finishing training early at epoch: {epoch}")
                     break
 
-        return loss_arr, val_loss_arr
+        return TrainResults(val_losses=val_loss_arr, train_losses=loss_arr)
 
     def test(self, model_dirpath: Optional[str] = None) -> TestResults:
         loss_func: _Loss = build_loss(self._cfg.training)
@@ -136,18 +134,18 @@ class ClassicEngine(BaseEngine):
         model, threshold = self._load_model(model, model_dirpath)
         model.to(self._cfg.training.device)
 
-        metrics, results = self._test(
+        results = self._test(
             model=model,
             threshold=threshold,
             loss_func=loss_func,
             dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl),
         )
 
-        self._log_results(metrics, csv_name=f"test_metrics.csv")
-        self._save_test_results(results)
+        self._log_results({f"test/{k}": v for k,v in results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
 
-        print(metrics)
-        return metrics, results
+        print("Test results:")
+        print(results.test_metrics.to_dict())
+        return results
 
     def _train_one_epoch(self, model: torch.nn.Module, epoch: int, optimizer: Optimizer, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> float:
         model.train()
@@ -214,7 +212,7 @@ class ClassicEngine(BaseEngine):
 
         return final_loss / count
 
-    def _evaluate(self, model: torch.nn.Module, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> dict[str, float]:
+    def _evaluate(self, model: torch.nn.Module, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> ValidationMetrics:
         binary_targets = []
         predictions = []
         val_loss = 0.0
@@ -250,16 +248,8 @@ class ClassicEngine(BaseEngine):
 
         binary_targets = np.array(binary_targets).squeeze()
         predictions = np.array(predictions).squeeze()
-        val_f1, val_prec, val_rec, var_thres = maximize_f1(binary_targets, predictions)
 
-        # TODO: make it a structure
-        return {
-            "val/f1": val_f1,
-            "val/precision": val_prec,
-            "val/recall": val_rec,
-            "val/threshold": var_thres,
-            "val/loss": val_loss,
-        }
+        return ValidationMetrics(targets=binary_targets, predictions=predictions, loss=val_loss)
 
     def _test(self, model: torch.nn.Module, threshold: float, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> TestResults:
         predictions = []
@@ -300,26 +290,22 @@ class ClassicEngine(BaseEngine):
         if count == 0:
             count = 1
 
-        # TODO: maybe it should be a DataFrame?
-        # Final data, predicted posterior probabilities and their corresponding input tensors,
-        # target codes and unstandardized columns
-        results = {
-            "inputs": np.array(input_data_tensors).squeeze(),
-            "targets": np.array(targets, dtype=np.float32).squeeze(),
-            "predictions": np.array(predictions).squeeze(),
-            **{k: np.array(v).squeeze() for k, v in unstandardized_data.items()}
-        }
         val_loss = val_loss / count
 
-        binary_targets = results["targets"] == self._target_code
-        binary_predictions = results["predictions"] >= threshold
-        test_precision: float = float(precision_score(binary_targets, binary_predictions))
-        test_recall: float = float(recall_score(binary_targets, binary_predictions))
-        test_f1 = float((test_precision * test_recall * 2) / (test_precision + test_recall + np.finfo(float).eps))
+        targets_squeezed = np.array(targets, dtype=np.float32).squeeze()
+        predictions_squeezed = np.array(predictions).squeeze()
+        test_results = TestResults(
+            inputs=np.array(input_data_tensors).squeeze(),
+            targets=targets_squeezed,
+            predictions=predictions_squeezed,
+            unstandardized={k: np.array(v).squeeze() for k, v in unstandardized_data.items()},
+            test_metrics=TestMetrics(
+                targets=targets_squeezed,
+                predictions=predictions_squeezed,
+                threshold=threshold,
+                target_code=self._target_code,
+                loss=val_loss,
+            ),
+        )
 
-        return {
-            "test/f1": test_f1,
-            "test/precision": test_precision,
-            "test/recall": test_recall,
-        }, results
-
+        return test_results
