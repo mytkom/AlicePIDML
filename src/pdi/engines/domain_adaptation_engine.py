@@ -9,7 +9,8 @@ from tqdm import tqdm
 from pdi.config import Config
 from pdi.data.data_preparation import CombinedDataLoader, ExpBatchItem, ExpBatchItemOut, MCBatchItem, DataPreparation, MCBatchItemOut
 from pdi.data.types import GroupID, Split
-from pdi.engines.base_engine import BaseEngine, TestResults, TrainResults, ValidationMetrics, TestMetrics
+from pdi.engines.base_engine import BaseEngine
+from pdi.results_and_metrics import TestResults, TrainResults, ValidationMetrics, TestMetrics
 from pdi.losses import build_loss
 from pdi.models import build_model
 from pdi.optimizers import build_optimizer
@@ -20,8 +21,8 @@ class DomainAdaptationEngine(BaseEngine):
     Engine suitable for DANN (Domain Adversarial Neural Network) training. It handles both
     simulated data and experimental data.
     """
-    def __init__(self, cfg: Config, target_code: int) -> None:
-        super().__init__(cfg, target_code)
+    def __init__(self, cfg: Config, target_code: int, base_dir: str | None = None) -> None:
+        super().__init__(cfg, target_code, base_dir)
         self._sim_data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
         (self._sim_train_dl, self._sim_val_dl, self._sim_test_dl) = self._sim_data_prep.create_dataloaders(
             batch_size={
@@ -60,6 +61,8 @@ class DomainAdaptationEngine(BaseEngine):
 
         self._sim_data_prep.save_dataset_metadata(self._base_dir)
 
+    def get_data_prep(self) -> DataPreparation:
+        return self._sim_data_prep
 
     def train(self) -> TrainResults:
         model = build_model(self._cfg.model, group_ids=self._sim_data_prep.get_group_ids())

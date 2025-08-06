@@ -1,13 +1,9 @@
 from abc import abstractmethod
 import dataclasses
-import gzip
 import json
 import os
-import pickle
-from typing import List, Optional
+from typing import Optional
 from joblib.pool import np
-from numpy import float32
-from numpy.typing import NDArray
 from pandas.io.parsers.readers import csv
 from torch import nn
 import torch
@@ -15,138 +11,20 @@ import wandb
 from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.config import Config
 from pdi.data.constants import COLUMNS_FOR_TRAINING
-from pdi.evaluate import maximize_f1
-from sklearn.metrics import precision_score, recall_score, f1_score
-
-class ValidationMetrics:
-    """
-    Represents evaluation metrics for training/validation, calculated dynamically using optimal threshold for F1 score.
-    """
-    def __init__(self, targets: NDArray, predictions: NDArray, loss: float):
-        self.f1, self.precision, self.rGecall, self.threshold = maximize_f1(targets, predictions)
-        self.loss = loss
-
-    def to_dict(self) -> dict:
-        """
-        Converts the validation metrics to a dictionary for logging or serialization.
-        """
-        return {
-            "f1": self.f1,
-            "precision": self.precision,
-            "recall": self.recall,
-            "loss": self.loss,
-            "threshold": self.threshold,
-        }
-
-class TestMetrics:
-    """
-    Represents evaluation metrics for test evaluation, calculated using the optimal threshold from validation.
-    """
-    def __init__(self, targets: NDArray, predictions: NDArray, threshold: float, target_code: int, loss: Optional[float] = None):
-        binary_targets = targets == target_code
-        binary_predictions = predictions >= threshold
-        self.f1 = f1_score(binary_targets, binary_predictions, average="binary")
-        self.precision = precision_score(binary_targets, binary_predictions, average="binary")
-        self.recall = recall_score(binary_targets, binary_predictions, average="binary")
-        self.loss = loss
-        self.threshold = threshold
-        self.target_code = target_code
-
-    def to_dict(self) -> dict:
-        """
-        Converts the test metrics to a dictionary for logging or serialization.
-        """
-        return {
-            "f1": self.f1,
-            "precision": self.precision,
-            "recall": self.recall,
-            "loss": self.loss,
-            "threshold": self.threshold,
-            "target_code": self.target_code,
-        }
-
-class TrainResults:
-    """
-    Represents training results, including validation metrics and loss data.
-    """
-    def __init__(self, train_losses: List[float], val_losses: List[float]):
-        self.train_losses = train_losses
-        self.val_losses = val_losses
-
-    def to_dict(self) -> dict:
-        """
-        Converts the training results to a dictionary for logging or serialization.
-        """
-        return {
-            "train_losses": self.train_losses,
-            "val_losses": self.val_losses,
-        }
-
-
-class TestResults:
-    """
-    Represents test results, including test metrics and data used for evaluation.
-    """
-    def __init__(self, inputs: NDArray, targets: NDArray, predictions: NDArray, unstandardized: dict[str, NDArray], test_metrics: TestMetrics):
-        self.inputs = inputs
-        self.targets = targets
-        self.predictions = predictions
-        self.unstandardized = unstandardized
-        self.test_metrics = test_metrics
-
-    @classmethod
-    def from_file(cls, filepath: str) -> "TestResults":
-        """
-        Initializes the TestResults object by loading data from a pickle file.
-
-        Args:
-            filepath (str): Path to the pickle file containing serialized test results.
-
-        Returns:
-            TestResults: An instance of TestResults initialized with the loaded data.
-        """
-        with gzip.open(filepath, "rb") as file:
-            data = pickle.load(file)
-
-        test_metrics = TestMetrics(
-            targets=np.array(data["targets"]),
-            predictions=np.array(data["predictions"]),
-            threshold=data["test_metrics"]["threshold"],
-            target_code=data["test_metrics"]["target_code"],
-            loss=data["test_metrics"]["loss"],
-        )
-
-        return cls(
-            inputs=np.array(data["inputs"]),
-            targets=np.array(data["targets"]),
-            predictions=np.array(data["predictions"]),
-            unstandardized={key: np.array(value) for key, value in data["unstandardized"].items()},
-            test_metrics=test_metrics,
-        )
-
-    def to_dict(self) -> dict:
-        """
-        Converts the test results to a dictionary for logging or serialization.
-        """
-        return {
-            "inputs": self.inputs.tolist(),
-            "targets": self.targets.tolist(),
-            "predictions": self.predictions.tolist(),
-            "unstandardized": {key: value.tolist() for key, value in self.unstandardized.items()},
-            "test_metrics": self.test_metrics.to_dict(),
-        }
+from pdi.data.data_preparation import DataPreparation
+from pdi.results_and_metrics import TrainResults, TestResults
 
 class BaseEngine:
     """
     BaseEngine is a class, which is a super class of all the engines. Engine is an object, which knows
     how to run data preparation, training and testing of a specific model and how to save files regarding it.
-    Child classes of BaseEngine needs to implement train() and test() methods and can use helper methods
+    Child classes of BaseEngine needs to implement train(), test() and get_data_prep() methods and can use helper methods
     to extract common behaviour like logging.
 
     Function build_engine(), which knows what engine is suitable for given config is in __init__.py file
     of this (engines) module.
     """
-    def __init__(self, cfg: Config, target_code: int) -> None:
+    def __init__(self, cfg: Config, target_code: int, base_dir: str | None) -> None:
         self._target_code = target_code
         self._epoch_num = 0
         self._epochs_since_last_progress = 0
@@ -154,17 +32,24 @@ class BaseEngine:
         self._best_f1 = 0.0
         # It there are many runs on the same config, there
         # should be subdirectories with number for this run
-        run_number = 1
-        project_target_path = os.path.join(cfg.results_dir, cfg.project_dir, TARGET_CODE_TO_PART_NAME[self._target_code])
-        while os.path.exists(os.path.join(project_target_path, f"run_{run_number}")):
-            run_number += 1
-        os.makedirs(os.path.join(project_target_path, f"run_{run_number}"))
-        self._base_dir = os.path.join(project_target_path, f"run_{run_number}")
+        if base_dir and os.path.exists(base_dir):
+            self._base_dir = base_dir
+        else:
+            run_number = 1
+            project_target_path = os.path.join(cfg.results_dir, cfg.project_dir, TARGET_CODE_TO_PART_NAME[self._target_code])
+            while os.path.exists(os.path.join(project_target_path, f"run_{run_number}")):
+                run_number += 1
+            os.makedirs(os.path.join(project_target_path, f"run_{run_number}"))
+            self._base_dir = os.path.join(project_target_path, f"run_{run_number}")
 
         # Dump config to base_dir
         with open(os.path.join(self._base_dir, "config.json"), "w") as config_file:
             config_dict = dataclasses.asdict(self._cfg)
             json.dump(config_dict, config_file, indent=4)
+
+    @abstractmethod
+    def get_data_prep(self) -> DataPreparation:
+        pass
 
     @abstractmethod
     def train(self) -> TrainResults:
@@ -208,7 +93,7 @@ class BaseEngine:
                           input_names=["input"],
                           output_names=["output"],
                           dynamic_axes={"input": {0: 'batch size'}})
-        
+
         model.to(self._cfg.training.device)
 
     def _load_model(self, skeleton_model: nn.Module, dirpath: Optional[str] = None) -> tuple[nn.Module, float]:

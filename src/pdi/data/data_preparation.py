@@ -3,6 +3,8 @@ import gzip
 import json
 import os
 import pickle
+from numpy.typing import NDArray
+from sklearn.preprocessing import MinMaxScaler
 import uproot3
 import numpy as np
 import pandas as pd
@@ -15,8 +17,10 @@ from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+from pdi.constants import TARGET_CODES
 from pdi.data.group_id_helpers import binary_array_to_group_id
 from pdi.data.constants import (
+    PART_DICT,
     PROCESSED_DIR,
     TARGET_COLUMN,
     COLUMNS_FOR_TRAINING,
@@ -24,6 +28,7 @@ from pdi.data.constants import (
 )
 from pdi.data.types import GroupID, InputTarget, Split
 from pdi.config import DataConfig
+from pdi.results_and_metrics import TestMetrics, TestResults
 
 # Target code (ground truth) is available in Monte Carlo (simulated) data
 # Tuple[standardized inputs tensor, target codes tensor, GroupID, undstandardized data]
@@ -320,6 +325,8 @@ class DataPreparation:
     # TRDSignal scaling in run2
     COLUMNS_TO_SCALE_RUN_2 = COLUMNS_TO_SCALE_RUN_3 + ["fTRDSignal"]
 
+    DEFAULT_NSIGMA_THRESHOLD = 3.0
+
     def __init__(
             self,
             config: DataConfig,
@@ -346,6 +353,7 @@ class DataPreparation:
         self._columns_for_training: List[str] = []
         self._columns_to_standardize: List[str] = self.COLUMNS_TO_SCALE_RUN_3 if config.is_run_3 else self.COLUMNS_TO_SCALE_RUN_2
         self._prepared_data: dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]] = {}
+        self._nsigma_normalized: tuple[dict[int, tuple[NDArray, MinMaxScaler]], NDArray] = ({}, np.array([]))
 
     def prepare_data(self) -> None:
         """
@@ -370,6 +378,9 @@ class DataPreparation:
         # Split dataset into Train/Validation/Test
         #   split ratios are specified in DataConfig self._cfg
         test_train_split: dict[Split, pd.DataFrame] = self._test_train_split(data)
+
+        if self._is_extended:
+            self._nsigma_normalized = self._calc_nsigma_normalized(test_train_split[Split.TEST], self.DEFAULT_NSIGMA_THRESHOLD)
 
         # Standardization parameters (mean, std) based on train split
         #   results are saved in self._scaling_params
@@ -410,6 +421,21 @@ class DataPreparation:
         self._load_or_prepare_data(splits)
 
         return self._prepared_data
+
+    def get_nsigma_test_metrics(self, target_code: int, threshold_unscaled: float = DEFAULT_NSIGMA_THRESHOLD) -> TestMetrics:
+        self._load_or_prepare_data([Split.TEST])
+
+        nsigma_normalized_all, targets = self._nsigma_normalized
+        nsigma_normalized_predictions, scaler = nsigma_normalized_all[target_code]
+        threshold_scaled = scaler.transform(np.array([[threshold_unscaled]])).squeeze()
+
+        return TestMetrics(
+            targets=targets,
+            predictions=nsigma_normalized_predictions,
+            threshold=threshold_scaled,
+            target_code=target_code,
+        )
+
 
     def create_dataloaders(
         self, batch_size: dict[Split, int], num_workers: dict[Split, int], undersample_missing_detectors: bool, undersample_pions: bool, splits: Optional[list[Split]] = None
@@ -540,6 +566,12 @@ class DataPreparation:
             ) as file:
                 pickle.dump(it_data, file)
 
+        if self._is_extended:
+            with gzip.open(
+                f"{self.save_dir}/nsigma_normalized.pkl", "wb"
+            ) as file:
+                pickle.dump(self._nsigma_normalized, file)
+
         self.save_dataset_metadata(self.save_dir)
 
 
@@ -651,6 +683,36 @@ class DataPreparation:
             Split.VAL: pd.DataFrame(val_data),
             Split.TEST: pd.DataFrame(test_data)
         }
+
+    def _calc_nsigma_normalized(self, data: pd.DataFrame, threshold: float) -> tuple[dict[int, tuple[NDArray, MinMaxScaler]], NDArray]:
+        """
+        Scale nsigma values to [0,1] and reverse meaning (1 - score). After such transformation predictions
+        are behaving the same way as torch model predictions and data is transformed so provided threshold (e.g. < 3.0)
+        is approx. >=0.5 after transformation.
+        """
+        nsigma_normalized: dict[int, tuple[NDArray, MinMaxScaler]] = {}
+        for target_code in TARGET_CODES:
+            tpc_n_sigmas = data[f"fTPCNSigma{PART_DICT[abs(target_code)]}"]
+            tof_n_sigmas = data[f"fTOFNSigma{PART_DICT[abs(target_code)]}"]
+
+            # Apply nsigma formula
+            n_sigma_predictions= np.where(
+                np.isnan(tof_n_sigmas),
+                np.abs(tpc_n_sigmas),
+                np.sqrt(tpc_n_sigmas**2 + tof_n_sigmas**2)
+            )
+
+            minmax_scaler = MinMaxScaler(feature_range=(0,1))
+            # make transformed threshold ~0.5
+            n_sigma_predictions= np.where(n_sigma_predictions > threshold, threshold * 2, n_sigma_predictions)
+            # make nsigmas to be in range 0 to 1
+            n_sigma_predictions_normalized = minmax_scaler.fit_transform(n_sigma_predictions.reshape(-1, 1)).squeeze()
+            # reverse it so lower nSigma is higher result
+            n_sigma_predictions_normalized = 1 - n_sigma_predictions_normalized
+            # bad sign
+            nsigma_normalized[target_code] = np.where(data["fSign"] != np.sign(target_code), 0, n_sigma_predictions_normalized), minmax_scaler
+
+        return nsigma_normalized, data[TARGET_COLUMN].to_numpy()
 
     def _undersample_pions(self, input_target_unstandardized: dict[InputTarget, pd.DataFrame]) -> dict[InputTarget, pd.DataFrame]:
         """
@@ -799,6 +861,12 @@ class DataPreparation:
             metadata = json.load(f)
             self._is_experimental = metadata["is_experimental"]
             self._is_extended = metadata["is_extended"]
+
+        if self._is_extended:
+            with gzip.open(
+                f"{self.save_dir}/nsigma_normalized.pkl", "rb"
+            ) as file:
+                self._nsigma_normalized = pickle.load(file)
 
         self._scaling_params = pd.read_json(f"{self.save_dir}/scaling_params.json", orient="split")
 
