@@ -39,8 +39,6 @@ class TestMetrics:
         self.loss = loss
         self.threshold = threshold
         self.target_code = target_code
-        self.targets = targets
-        self.predictions = predictions
 
     def to_dict(self) -> dict:
         """
@@ -77,12 +75,17 @@ class TestResults:
     """
     Represents test results, including test metrics and data used for evaluation.
     """
-    def __init__(self, inputs: NDArray, targets: NDArray, predictions: NDArray, unstandardized: dict[str, NDArray], test_metrics: TestMetrics):
-        self.inputs = inputs
-        self.targets = targets
+    def __init__(self, targets: NDArray, predictions: NDArray, threshold: float, target_code: int, loss: float | None = None):
         self.predictions = predictions
-        self.unstandardized = unstandardized
-        self.test_metrics = test_metrics
+        self.targets = targets
+        self.target_code = target_code
+        self.test_metrics = TestMetrics(
+            targets,
+            predictions,
+            threshold,
+            target_code,
+            loss
+        )
 
     @classmethod
     def from_file(cls, filepath: str) -> "TestResults":
@@ -98,31 +101,28 @@ class TestResults:
         with gzip.open(filepath, "rb") as file:
             data = pickle.load(file)
 
-        test_metrics = TestMetrics(
+        return cls(
             targets=np.array(data["targets"]),
             predictions=np.array(data["predictions"]),
             threshold=data["test_metrics"]["threshold"],
-            target_code=data["test_metrics"]["target_code"],
+            target_code=data["target_code"],
             loss=data["test_metrics"]["loss"],
         )
 
-        return cls(
-            inputs=np.array(data["inputs"]),
-            targets=np.array(data["targets"]),
-            predictions=np.array(data["predictions"]),
-            unstandardized={key: np.array(value) for key, value in data["unstandardized"].items()},
-            test_metrics=test_metrics,
-        )
+    def save(self, filepath: str):
+        dict_repr = self.to_dict()
+
+        with gzip.open(filepath, "w") as file:
+            pickle.dump(dict_repr, file)
 
     def to_dict(self) -> dict:
         """
         Converts the test results to a dictionary for logging or serialization.
         """
         return {
-            "inputs": self.inputs.tolist(),
             "targets": self.targets.tolist(),
             "predictions": self.predictions.tolist(),
-            "unstandardized": {key: value.tolist() for key, value in self.unstandardized.items()},
+            "target_code": self.target_code,
             "test_metrics": self.test_metrics.to_dict(),
         }
 

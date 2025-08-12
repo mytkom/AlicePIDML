@@ -120,7 +120,7 @@ def plot_and_save_beeswarm(result, save_dir: str, file_name: str, title: str):
 
 def generate_figure_thumbnails_from_iterator(
     figure_iter: Iterator[Tuple[Figure, str]],
-    save_path: str | None = None,
+    save_path: str,
     thumbnail_width: int = 300
 ) -> HTML:
     """
@@ -136,14 +136,12 @@ def generate_figure_thumbnails_from_iterator(
     thumbnails = []
 
     for fig, filename in figure_iter:
-        # Save full-size figure
-        if save_path:
-            filepath = os.path.abspath(os.path.join(save_path, filename))
-            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+        filepath = os.path.abspath(os.path.join(save_path, filename))
+        fig.savefig(filepath, dpi=300, bbox_inches='tight')
 
         # Save to buffer for thumbnail
         buf = BytesIO()
-        fig.savefig(buf, format='png', dpi=50)
+        fig.savefig(buf, format='png', dpi=200)
         buf.seek(0)
         b64 = base64.b64encode(buf.read()).decode('utf-8')
         fig.clf()

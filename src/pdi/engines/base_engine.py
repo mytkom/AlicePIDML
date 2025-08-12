@@ -56,8 +56,31 @@ class BaseEngine:
         pass
 
     @abstractmethod
-    def test(self, model_dirpath: Optional[str] = None) -> TestResults:
+    def _test(self, model_dirpath: Optional[str] = None) -> TestResults:
         pass
+
+    def test(self, model_dirpath: Optional[str] = None) -> TestResults:
+        base_dir = model_dirpath if model_dirpath is not None else self._base_dir
+        test_results_path = os.path.join(base_dir, "test_results.pkl")
+
+        # Try to load cached TestResults
+        if os.path.exists(test_results_path):
+            try:
+                return TestResults.from_file(test_results_path)
+            except:
+                print("Cannot use precomputed TestResults, computing from scratch:")
+
+        results = self._test(model_dirpath)
+
+        self._log_results({f"test/{k}": v for k,v in results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
+
+        print("Test results:")
+        print(results.test_metrics.to_dict())
+
+        # Save TestResults
+        results.save(test_results_path)
+
+        return results
 
     def _save_best_model(self, model: nn.Module, epoch: int, threshold: float):
         """
@@ -101,7 +124,9 @@ class BaseEngine:
         Loads weights for pytorch model from dirpath according to _save_best_model() file naming convention.
         """
         if not dirpath:
-            dirpath = os.path.join(self._base_dir, "model_weights")
+            dirpath = self._base_dir
+        dirpath = os.path.join(dirpath, "model_weights")
+
         skeleton_model.load_state_dict(torch.load(os.path.join(dirpath, "best.pt"), weights_only=True, map_location=self._cfg.training.device))
         with open(os.path.join(dirpath, f"metadata.json"), "r") as metadata_file:
             metadata = json.load(metadata_file)

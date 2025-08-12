@@ -3,6 +3,7 @@ from joblib.pool import np
 from numpy.typing import NDArray
 from torch.functional import Tensor
 import torch
+import os
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
@@ -149,33 +150,6 @@ class DomainAdaptationEngine(BaseEngine):
         self._model = model
 
         return TrainResults(train_losses=loss_arr, val_losses=val_loss_arr)
-
-    def test(self, model_dirpath: Optional[str] = None) -> TestResults:
-        loss_class: _Loss = build_loss(self._cfg.training)
-        loss_domain: _Loss = build_loss(self._cfg.training)
-        model: torch.nn.Module = build_model(self._cfg.model, group_ids=self._sim_data_prep.get_group_ids())
-        model, threshold = self._load_model(model, model_dirpath)
-        model.to(self._cfg.training.device)
-
-        class_results, domain_results = self._test(
-            model=model,
-            threshold=threshold,
-            loss_func_class=loss_class,
-            loss_func_domain=loss_domain,
-            sim_dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._sim_test_dl),
-            exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_test_dl),
-        )
-
-        self._log_results({f"test/{k}": v for k,v in class_results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
-        self._log_results({f"test/domain/{k}": v for k,v in domain_results.test_metrics.to_dict().items()}, csv_name=f"test_domain_metrics.csv")
-
-        print("Class label test results:")
-        print(class_results.test_metrics.to_dict())
-        print("Domain label test results:")
-        print(domain_results.test_metrics.to_dict())
-
-        # To handle common interface, only class label results are returned
-        return class_results
 
     def _train_one_epoch(
             self,
@@ -362,34 +336,18 @@ class DomainAdaptationEngine(BaseEngine):
 
     def _test(
             self,
-            model: torch.nn.Module,
-            threshold: float,
-            loss_func_class: _Loss,
-            loss_func_domain: _Loss,
-            sim_dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut],
-            exp_dataloader: CombinedDataLoader[ExpBatchItem, ExpBatchItemOut],
-    ) -> tuple[TestResults, TestResults]:
+            model_dirpath: Optional[str] = None,
+    ) -> TestResults:
         DOMAIN_CLASSIFIER_THRESHOLD=0.5
 
-        model.eval()
+        loss_func_class: _Loss = build_loss(self._cfg.training)
+        loss_func_domain: _Loss = build_loss(self._cfg.training)
+        model: torch.nn.Module = build_model(self._cfg.model, group_ids=self._sim_data_prep.get_group_ids())
+        model, threshold = self._load_model(model, model_dirpath)
+        model.to(self._cfg.training.device)
 
-        class_results = {
-            "inputs": [],
-            "targets": [],
-            "predictions": [],
-            "gids": [],
-            "unstandardized": {},
-        }
-        domain_results = {
-            "inputs": [],
-            "targets": [],
-            "predictions": [],
-            "gids": [],
-            "unstandardized": {},
-        }
-        # input_data_tensors = []
-        test_loss = 0.0
-        count = 0
+        sim_dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._sim_test_dl)
+        exp_dataloader=cast(CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_test_dl)
 
         # Undersample to minority from source/target dataloaders
         loader_len = min(len(sim_dataloader), len(exp_dataloader))
@@ -397,38 +355,27 @@ class DomainAdaptationEngine(BaseEngine):
         sim_iter = iter(sim_dataloader)
         exp_iter = iter(exp_dataloader)
 
+        class_results = {
+            "targets": [],
+            "predictions": [],
+        }
+        domain_results = {
+            "targets": [],
+            "predictions": [],
+        }
+        # input_data_tensors = []
+        test_loss = 0.0
+        count = 0
+
+        model.eval()
+
         # TODO: Consider training common GroupID missing detector combination for
         # sim and exp in each iteration. Maybe it will improve results---distributions
         # between groups can differ.
         for i in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
-            sim_inputs, sim_targets, sim_gids, sim_unstandardized = next(sim_iter)
-            sim_gid: GroupID = cast(GroupID, sim_gids[0])
+            sim_inputs, sim_targets, _, _ = next(sim_iter)
 
-            class_results["targets"].extend(sim_targets.cpu().detach().numpy())
-            class_results["inputs"].extend(sim_inputs.cpu().detach().numpy())
-            class_results["gids"].extend(sim_gids.cpu().detach().numpy())
-            for k, v in sim_unstandardized.items():
-                if k not in class_results["unstandardized"]:
-                    class_results["unstandardized"][k] = []
-                class_results["unstandardized"][k].extend(v.cpu().detach().numpy())
-
-            exp_inputs, exp_gids, exp_unstandardized = next(exp_iter)
-            exp_gid: GroupID = cast(GroupID, exp_gids[0])
-
-            domain_results["inputs"].extend(sim_inputs.cpu().detach().numpy())
-            domain_results["inputs"].extend(exp_inputs.cpu().detach().numpy())
-
-            domain_results["gids"].extend(sim_gids.cpu().detach().numpy())
-            domain_results["gids"].extend(exp_gids.cpu().detach().numpy())
-
-            for k, v in sim_unstandardized.items():
-                if k not in domain_results["unstandardized"]:
-                    domain_results["unstandardized"][k] = []
-                domain_results["unstandardized"][k].extend(v.cpu().detach().numpy())
-            for k, v in exp_unstandardized.items():
-                if k not in domain_results["unstandardized"]:
-                    domain_results["unstandardized"][k] = []
-                domain_results["unstandardized"][k].extend(v.cpu().detach().numpy())
+            exp_inputs, _, _ = next(exp_iter)
 
             sim_inputs = sim_inputs.to(self._cfg.training.device)
             exp_inputs = exp_inputs.to(self._cfg.training.device)
@@ -455,22 +402,19 @@ class DomainAdaptationEngine(BaseEngine):
             test_loss += loss.item()
             count += 1
 
+            class_results["targets"].extend(sim_targets.cpu().detach().numpy())
             predict_class = torch.sigmoid(sim_class_out)
             class_results["predictions"].extend(predict_class.cpu().detach().numpy())
 
-            predict_domain = torch.sigmoid(torch.cat((sim_domain_out, exp_domain_out), dim=0))
             domain_targets = torch.cat((torch.zeros_like(sim_domain_out), torch.ones_like(exp_domain_out)), dim=0)
             domain_results["targets"].extend(domain_targets.cpu().detach().numpy())
+            predict_domain = torch.sigmoid(torch.cat((sim_domain_out, exp_domain_out), dim=0))
             domain_results["predictions"].extend(predict_domain.cpu().detach().numpy())
 
             del exp_out
             del sim_inputs
             del sim_targets
-            del sim_gids
-            del sim_unstandardized
             del exp_inputs
-            del exp_gids
-            del exp_unstandardized
 
         if count == 0:
             count = 1
@@ -483,34 +427,30 @@ class DomainAdaptationEngine(BaseEngine):
         squeezed_predictions_class = np.array(class_results["predictions"]).squeeze()
 
         class_test_results = TestResults(
-            inputs=np.array(class_results["inputs"]).squeeze(),
             targets=squeezed_targets_class,
             predictions=squeezed_predictions_class,
-            unstandardized={k: np.array(v).squeeze() for k, v in class_results["unstandardized"].items()},
-            test_metrics=TestMetrics(
-                targets=squeezed_targets_class,
-                predictions=squeezed_predictions_class,
-                threshold=threshold,
-                target_code=self._target_code,
-                loss=test_loss,
-            ),
+            threshold=threshold,
+            target_code=self._target_code,
+            loss=test_loss,
         )
 
         # Domain classification
         squeezed_targets_domain = np.array(domain_results["targets"], dtype=np.float32).squeeze()
         squeezed_predictions_domain = np.array(domain_results["predictions"]).squeeze()
         domain_test_results = TestResults(
-            inputs=np.array(domain_results["inputs"]).squeeze(),
             targets=squeezed_targets_domain,
             predictions=squeezed_predictions_domain,
-            unstandardized={k: np.array(v).squeeze() for k, v in domain_results["unstandardized"].items()},
-            test_metrics=TestMetrics(
-                targets=squeezed_targets_domain,
-                predictions=squeezed_predictions_domain,
-                threshold=DOMAIN_CLASSIFIER_THRESHOLD,
-                target_code=self._target_code,
-                loss=test_loss,
-            ),
+            threshold=DOMAIN_CLASSIFIER_THRESHOLD,
+            target_code=self._target_code,
+            loss=test_loss,
         )
 
-        return class_test_results, domain_test_results
+        self._log_results({f"test/domain/{k}": v for k,v in domain_test_results.test_metrics.to_dict().items()}, csv_name=f"test_domain_metrics.csv")
+
+        print("Domain label test results:")
+        print(domain_test_results.test_metrics.to_dict())
+        
+        domain_test_path = os.path.join(self._base_dir if model_dirpath is None else model_dirpath, "domain_test_results.pkl")
+        domain_test_results.save(domain_test_path)
+
+        return class_test_results

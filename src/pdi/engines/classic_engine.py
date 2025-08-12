@@ -2,6 +2,7 @@ from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
 import torch
+import os
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
@@ -129,26 +130,8 @@ class ClassicEngine(BaseEngine):
                     print(f"Finishing training early at epoch: {epoch}")
                     break
 
+
         return TrainResults(val_losses=val_loss_arr, train_losses=loss_arr)
-
-    def test(self, model_dirpath: Optional[str] = None) -> TestResults:
-        loss_func: _Loss = build_loss(self._cfg.training)
-        model: torch.nn.Module = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
-        model, threshold = self._load_model(model, model_dirpath)
-        model.to(self._cfg.training.device)
-
-        results = self._test(
-            model=model,
-            threshold=threshold,
-            loss_func=loss_func,
-            dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl),
-        )
-
-        self._log_results({f"test/{k}": v for k,v in results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
-
-        print("Test results:")
-        print(results.test_metrics.to_dict())
-        return results
 
     def _train_one_epoch(self, model: torch.nn.Module, epoch: int, optimizer: Optimizer, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> float:
         model.train()
@@ -222,7 +205,7 @@ class ClassicEngine(BaseEngine):
         count = 0
 
         model.eval()
-        for _, (input_data, target, gid, _) in enumerate(tqdm(dataloader)):
+        for _, (input_data, target, _, _) in enumerate(tqdm(dataloader)):
             input_data = input_data.to(self._cfg.training.device)
             binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
 
@@ -242,7 +225,6 @@ class ClassicEngine(BaseEngine):
             del input_data
             del binary_target
             del target
-            del gid
 
         if count == 0:
             count = 1
@@ -254,16 +236,18 @@ class ClassicEngine(BaseEngine):
 
         return ValidationMetrics(targets=binary_targets, predictions=predictions, loss=val_loss)
 
-    def _test(self, model: torch.nn.Module, threshold: float, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> TestResults:
+    def _test(self, model_dirpath: Optional[str] = None) -> TestResults:
+        loss_func: _Loss = build_loss(self._cfg.training)
+        model: torch.nn.Module = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
+        model, threshold = self._load_model(model, model_dirpath)
+        model.to(self._cfg.training.device)
         predictions = []
         targets = []
-        unstandardized_data = {}
-        input_data_tensors = []
         val_loss = 0.0
         count = 0
 
         model.eval()
-        for _, (input_data, target, gid, data_dict) in enumerate(tqdm(dataloader)):
+        for _, (input_data, target, _, _) in enumerate(tqdm(cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl))):
             input_data = input_data.to(self._cfg.training.device)
             binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
 
@@ -278,17 +262,10 @@ class ClassicEngine(BaseEngine):
             predict_target = torch.sigmoid(out)
             predictions.extend(predict_target.cpu().detach().numpy())
             targets.extend(target.cpu().detach().numpy())
-            input_data_tensors.extend(input_data.cpu().detach().numpy())
-            for k, v in data_dict.items():
-                if k not in unstandardized_data:
-                    unstandardized_data[k] = []
-                unstandardized_data[k].extend(v.cpu().detach().numpy())
 
             del input_data
             del binary_target
             del target
-            del gid
-            del data_dict
 
         if count == 0:
             count = 1
@@ -298,17 +275,11 @@ class ClassicEngine(BaseEngine):
         targets_squeezed = np.array(targets, dtype=np.float32).squeeze()
         predictions_squeezed = np.array(predictions).squeeze()
         test_results = TestResults(
-            inputs=np.array(input_data_tensors).squeeze(),
             targets=targets_squeezed,
             predictions=predictions_squeezed,
-            unstandardized={k: np.array(v).squeeze() for k, v in unstandardized_data.items()},
-            test_metrics=TestMetrics(
-                targets=targets_squeezed,
-                predictions=predictions_squeezed,
-                threshold=threshold,
-                target_code=self._target_code,
-                loss=val_loss,
-            ),
+            threshold=threshold,
+            target_code=self._target_code,
+            loss=val_loss,
         )
 
         return test_results
