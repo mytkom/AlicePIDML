@@ -47,11 +47,13 @@ def dump_default_config():
         json.dump(config_dict, config_file, indent=4)
 
 
-def engine_single_run(config: Config, target_code: int, test: bool, sweep: bool):
+def engine_single_run(config: Config, target_code: int, test: bool, sweep: bool) -> tuple[BaseEngine, dict | None]:
     particle_name = TARGET_CODE_TO_PART_NAME[target_code]
 
+    sweep_config = None
     # Initialize logging in wandb
     if sweep:
+        sweep_config = wandb.config["sweep"]
         wandb.init(name=particle_name)
         merge_configs(config, wandb.config["sweep"])
         print(f"Sweep config: {wandb.config['sweep']}")
@@ -69,4 +71,6 @@ def engine_single_run(config: Config, target_code: int, test: bool, sweep: bool)
         print(f"Running test for {particle_name}.")
         engine.test()
         print(f"Test ended for {particle_name}, end of main.")
+    
+    return engine, sweep_config
 

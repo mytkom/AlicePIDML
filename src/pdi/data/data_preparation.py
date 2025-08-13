@@ -3,6 +3,7 @@ import gzip
 import json
 import os
 import pickle
+import warnings
 from numpy.typing import NDArray
 from sklearn.preprocessing import MinMaxScaler
 from torch._dynamo.utils import istype
@@ -211,18 +212,35 @@ class CombinedDataLoader(Generic[InT, OutT]):
         return sum(len(d) for d in self.dataloaders)
 
     def unwrap(self) -> pd.DataFrame:
+        """
+        Unwraps the CombinedDataLoader by concatenating the datasets from all dataloaders into a single DataFrame.
+        If undersampling is enabled, all datasets are truncated to the length of the smallest dataset.
+        """
         if self.shuffle:
-            raise AttributeError("Cannot efficiently unwrap shuffled CombinedDataLoader.")
-
+            warnings.warn(
+                "Unwrapping shuffled CombinedDataLoader. The resulting data may differ from iterating over the dataloader."
+            )
+    
+        # Collect data from each dataloader
         data_records = []
+        min_len = float('inf')  # Initialize to infinity for finding the minimum length
+    
         for dataloader in self.dataloaders:
-            if isinstance(dataloader.dataset, (MCDataset, ExpDataset)):
-                data_records.append(dataloader.dataset.to_df())
+            dataset = dataloader.dataset
+            if isinstance(dataset, (MCDataset, ExpDataset)):
+                data_records.append(dataset.to_df())
+                min_len = min(min_len, len(dataset))
             else:
-                raise AttributeError("Cannot efficiently unwrap shuffled CombinedDataLoader. Unexpected Dataset class.")
-
+                raise AttributeError(
+                    "Cannot unwrap CombinedDataLoader. Unexpected Dataset class."
+                )
+    
+        # Apply undersampling if enabled
+        if self.undersample:
+            data_records = [df.iloc[self.rng.sample(range(len(df)), int(min(len(df), min_len)))] for df in data_records]
+    
+        # Concatenate all data into a single DataFrame
         return pd.concat(data_records, ignore_index=True)
-
 def calculate_checksum(filenames: list[str], config: DataConfig, seed: int, scaling_params: Optional[pd.DataFrame] = None) -> str:
     """
     Calculate a checksum based on the contents of the given files, a config object and seed.

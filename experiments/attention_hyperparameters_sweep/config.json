@@ -94,8 +94,8 @@
         "project_name": "Hyperparameter tuning"
     },
     "validation": {
-        "batch_size": 8192,
-        "num_workers": 8,
+        "batch_size": 2048,
+        "num_workers": 2,
         "validate_every": 5
     },
     "training": {
@@ -133,14 +133,14 @@
        "start_lr": 0.003,
        "device": "cpu",
        "steps_to_log": 50,
-       "batch_size": 8192,
+       "batch_size": 512,
        "max_epochs": 2,
        "early_stopping_epoch_count": 2,
        "early_stopping_progress_threshold": 0.001,
-       "num_workers": 8,
+       "num_workers": 2,
        "weight_particles_species": false
     },
-    "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
+    "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC24b1-527108-AODS-1-8-with-nsigma.root"],
     "exp_dataset_paths": [],
     "project_dir": "attention_hyperparameter_tuning",
     "results_dir": "results",

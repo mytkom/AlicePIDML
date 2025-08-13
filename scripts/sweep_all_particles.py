@@ -1,6 +1,7 @@
 import json
 import tyro
 import wandb
+import hashlib
 from utils import dump_default_config, engine_single_run, load_config
 from pdi.constants import PART_NAME_TO_TARGET_CODE
 from pathlib import Path
@@ -9,8 +10,18 @@ from pdi.config import AllParticlesConfig
 if __name__ == "__main__":
     dump_default_config()
 
-    # Use tyro to parse CLI arguments and load the configuration
     cli_config = tyro.cli(AllParticlesConfig)
+
+    if not cli_config.output_file:
+        # Calculate checksum of cli_config and save the file as training_runs/{checksum}.json
+        cli_config_dict = cli_config.__dict__
+        cli_config_json = json.dumps(cli_config_dict, sort_keys=True)
+        checksum = hashlib.md5(cli_config_json.encode()).hexdigest()
+        output_dir = Path("training_runs")
+        output_dir.mkdir(exist_ok=True)
+        cli_config.output_file = str(output_dir / f"sweep_{checksum}.json")
+        
+    output_file_path = str(Path(cli_config.output_file).resolve())
 
     if cli_config.all:
         cli_config.all = str(Path(cli_config.all).resolve())
@@ -18,7 +29,11 @@ if __name__ == "__main__":
     else:
         raise KeyError("Config path must be specified!")
 
-    for part_name in PART_NAME_TO_TARGET_CODE.keys():
+    sweep_metadata: dict[int, list[dict]] = {}
+
+    for part_name, target_code in PART_NAME_TO_TARGET_CODE.items():
+        sweep_metadata[target_code] = []
+
         if cli_config.__getattribute__(part_name):
             cli_config.__setattr__(part_name, str(Path(cli_config.__getattribute__(part_name)).resolve()))
             config = load_config(cli_config.__getattribute__(part_name))
@@ -42,4 +57,16 @@ if __name__ == "__main__":
             sweep=sweep_configuration,
             project=config.sweep.project_name,
         )
-        wandb.agent(sweep_id, function=lambda: engine_single_run(config, PART_NAME_TO_TARGET_CODE[part_name], cli_config.test, sweep=True))
+
+        def run_and_collect():
+            engine, sweep_config = engine_single_run(config, target_code, cli_config.test, sweep=True)
+            sweep_metadata[target_code].append({
+                "base_dir": engine._base_dir,
+                "sweep_config": sweep_config
+            })
+
+            with open(output_file_path, "w") as output_file:
+                json.dump(sweep_metadata, output_file, indent=4)
+            print(f"Updated metadata saved to {cli_config.output_file}")
+
+        wandb.agent(sweep_id, function=run_and_collect)
