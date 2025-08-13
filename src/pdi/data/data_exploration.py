@@ -14,37 +14,6 @@ from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-# def plot_particle_distribution(
-#     target_code: int,
-#     prep: GroupedDataPreparation,
-#     splits: list[Split],
-#     x_axis: str,
-#     name: str = None,
-#     save_dir: str = None,
-# ):
-#     groups = prep.grouped_it
-#     bins = np.linspace(0, 5, 100)
-#     for split in splits:
-#         labels = []
-#         for gid, group in groups.items():
-#             targets = group[split][InputTarget.TARGET]
-#             targets = pd.DataFrame(targets, columns=[TARGET_COLUMN])
-#             group_add = prep.grouped_add[gid][split][Additional[x_axis]]
-#             x_values = group_add[targets[TARGET_COLUMN] == target_code]
-#             counts, bins = np.histogram(x_values, bins=bins)
-#             detectors = detector_unmask(gid)
-#             detectors = [d.name for d in detectors]
-#             detectors_label = ",".join(detectors)
-#             plt.plot(bins[:-1], counts)
-#             labels.append(f"Available detectors: {detectors_label}")
-#         plt.title(f"Distribution of {TARGET_CODE_TO_PART_NAME[target_code]}")
-#         plt.xlabel(x_axis)
-#         plt.ylabel("Count")
-#         plt.legend(labels, loc="upper right")
-#         plt.savefig(f"{save_dir}/{name}_{split}.png")
-#         plt.show()
-#         plt.close()
-
 def plot_cor_matrix(df: pd.DataFrame, title: str) -> Figure:
     """
     Plot the correlation matrix of a DataFrame.
@@ -74,7 +43,7 @@ def plot_cor_matrix(df: pd.DataFrame, title: str) -> Figure:
 # Feature importance
 def explain_model(
     model, df, batch_size: int = 16, batches: int = 50, hide_progress_bars: bool = False
-):
+) -> tuple[shap.Explanation, int]:
     result = None
     rows_count = 0
     for j in range(batches):
@@ -108,6 +77,9 @@ def explain_model(
 
     print("Explanation finished.")
     print("Number of entries explained: ", rows_count)
+    if result is None:
+        raise AttributeError("Result cannot be none at the end of thi function!")
+
     return result, rows_count
 
 

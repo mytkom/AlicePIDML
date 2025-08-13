@@ -274,7 +274,6 @@ class AttentionModelDANN(AttentionModel):
         super().__init__(
             in_dim, embed_hidden_layers, embed_dim, encoder_ff_hidden, ff_hidden_layers, pool_hidden_layers, num_heads, num_blocks, activation, dropout
         )
-        # TODO: should I use different architecture for the domain classifier? I should do sweeps to find out.
         self.domain_classifier = NeuralNet([embed_dim, *dom_hidden_layers, 1], activation)
         self.alpha = alpha
 

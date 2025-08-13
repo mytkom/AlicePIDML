@@ -28,7 +28,6 @@ def group_id_to_binary_array(gid: GroupID):
 def group_id_to_detectors_available(group_id: GroupID) -> list[Detector]:
     missing_columns = filter_strings_by_binary(int(group_id), np.array(COLUMNS_FOR_TRAINING), '0')
     detectors = [Detector.TPC, Detector.TOF, Detector.TRD]
-    print(missing_columns)
     for col in missing_columns:
         if col in COLUMN_DETECTOR.keys() and COLUMN_DETECTOR[col] in detectors:
             detectors.remove(COLUMN_DETECTOR[col])
