@@ -6,7 +6,6 @@ import pickle
 import warnings
 from numpy.typing import NDArray
 from sklearn.preprocessing import MinMaxScaler
-from torch._dynamo.utils import istype
 import uproot3
 import numpy as np
 import pandas as pd
@@ -856,7 +855,7 @@ class DataPreparation:
             ),
         )
 
-        self._log(f"Dataset has been splitted in the following ratios:")
+        self._log("Dataset has been splitted in the following ratios:")
         self._log(
             f"\tTrain {self._cfg.train_size}, Validation {1 - self._cfg.test_size - self._cfg.train_size:.2f}, Test {self._cfg.test_size}"
         )

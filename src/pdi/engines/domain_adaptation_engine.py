@@ -22,7 +22,6 @@ from pdi.results_and_metrics import (
     TestResults,
     TrainResults,
     ValidationMetrics,
-    TestMetrics,
 )
 from pdi.losses import build_loss
 from pdi.models import build_model
@@ -189,7 +188,7 @@ class DomainAdaptationEngine(BaseEngine):
                             for k, v in domain_val_metrics.to_dict().items()
                         },
                     },
-                    csv_name=f"validation_metrics.csv",
+                    csv_name="validation_metrics.csv",
                 )
                 print(
                     f"Epoch: {epoch}, F1: {class_val_metrics.f1:.4f}, Domain F1: {domain_val_metrics.f1:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
@@ -232,7 +231,6 @@ class DomainAdaptationEngine(BaseEngine):
             sim_inputs, sim_targets, sim_gids, _ = next(sim_iter)
             sim_gid: GroupID = cast(GroupID, sim_gids[0])
             exp_inputs, exp_gids, _ = next(exp_iter)
-            exp_gid: GroupID = cast(GroupID, exp_gids[0])
 
             sim_inputs = sim_inputs.to(self._cfg.training.device)
             exp_inputs = exp_inputs.to(self._cfg.training.device)
@@ -565,7 +563,7 @@ class DomainAdaptationEngine(BaseEngine):
                 f"test/domain/{k}": v
                 for k, v in domain_test_results.test_metrics.to_dict().items()
             },
-            csv_name=f"test_domain_metrics.csv",
+            csv_name="test_domain_metrics.csv",
         )
 
         print("Domain label test results:")

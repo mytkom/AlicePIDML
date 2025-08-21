@@ -2,7 +2,6 @@ from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
 import torch
-import os
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
@@ -19,7 +18,6 @@ from pdi.results_and_metrics import (
     TestResults,
     TrainResults,
     ValidationMetrics,
-    TestMetrics,
 )
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
 from pdi.losses import build_loss
@@ -148,7 +146,7 @@ class ClassicEngine(BaseEngine):
                         "val/f1_best": self._best_f1,
                         **{f"val/{k}": v for k, v in val_metrics.to_dict().items()},
                     },
-                    csv_name=f"validation_metrics.csv",
+                    csv_name="validation_metrics.csv",
                 )
                 print(
                     f"Epoch: {epoch}, F1: {val_metrics.f1:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"

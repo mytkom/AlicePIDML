@@ -51,7 +51,7 @@ class BaseEngine:
             self._base_dir = os.path.join(project_target_path, f"run_{run_number}")
 
         # Dump config to base_dir
-        with open(os.path.join(self._base_dir, "config.json"), "w") as config_file:
+        with open(os.path.join(self._base_dir, "config.json"), "w", encoding="utf-8") as config_file:
             config_dict = dataclasses.asdict(self._cfg)
             json.dump(config_dict, config_file, indent=4)
 
@@ -75,14 +75,14 @@ class BaseEngine:
         if os.path.exists(test_results_path):
             try:
                 return TestResults.from_file(test_results_path)
-            except:
+            except FileNotFoundError:
                 print("Cannot use precomputed TestResults, computing from scratch:")
 
         results = self._test(model_dirpath)
 
         self._log_results(
             {f"test/{k}": v for k, v in results.test_metrics.to_dict().items()},
-            csv_name=f"test_metrics.csv",
+            csv_name="test_metrics.csv",
         )
 
         print("Test results:")
@@ -114,8 +114,8 @@ class BaseEngine:
 
         artifact.add_file(model_path)
 
-        metadata_path = os.path.join(dirpath, f"metadata.json")
-        with open(metadata_path, "w") as metadata_file:
+        metadata_path = os.path.join(dirpath, "metadata.json")
+        with open(metadata_path, "w", encoding="utf-8") as metadata_file:
             json.dump(
                 {
                     "threshold": str(threshold),
@@ -169,7 +169,7 @@ class BaseEngine:
                 map_location=self._cfg.training.device,
             )
         )
-        with open(os.path.join(dirpath, f"metadata.json"), "r") as metadata_file:
+        with open(os.path.join(dirpath, "metadata.json"), "r", encoding="utf-8") as metadata_file:
             metadata = json.load(metadata_file)
 
         return skeleton_model, float(metadata["threshold"])
@@ -234,7 +234,7 @@ class BaseEngine:
         csv_path = os.path.join(dir_path, csv_name)
 
         file_exists = os.path.exists(csv_path)
-        with open(csv_path, mode="a", newline="") as csv_file:
+        with open(csv_path, encoding="utf-8", mode="a", newline="") as csv_file:
             writer = csv.DictWriter(
                 csv_file,
                 fieldnames=(

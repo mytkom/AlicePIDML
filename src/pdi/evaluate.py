@@ -11,11 +11,10 @@ calculate_precision_recall
 
 """
 
-from typing import Callable, Dict
+from typing import Dict
 
 import numpy as np
 import pandas as pd
-import torch
 from numpy.typing import NDArray
 from sklearn.metrics import precision_recall_curve
 from torch import Tensor
