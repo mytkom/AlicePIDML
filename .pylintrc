@@ -92,7 +92,12 @@ disable=
     # We anticipate #3512 where it will become optional
     fixme,
     cyclic-import,
-
+    too-many-arguments,  # PLR0913
+    too-many-branches,   # PLR0912
+    too-many-nested-blocks,  # PLR1702
+    too-many-locals,  # PLR0914
+    too-many-statements,  # PLR0915
+    too-many-instance-attributes
 
 [REPORTS]
 

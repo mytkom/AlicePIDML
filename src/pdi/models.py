@@ -129,14 +129,12 @@ class NeuralNetEnsemble(nn.Module):
             dropout (float, optional): dropout rate. Defaults to 0.4.
         """
         super().__init__()
-        self.models = nn.ModuleDict(
-            {
-                str(g_id): NeuralNet(
-                    [bin(g_id).count("1")] + hidden_layers + [1], activation, dropout
-                )
-                for g_id in group_ids
-            }
-        )
+        self.models = nn.ModuleDict({
+            str(g_id): NeuralNet(
+                [bin(g_id).count("1")] + hidden_layers + [1], activation, dropout
+            )
+            for g_id in group_ids
+        })
 
         # caching tuple -> group_id to save few transformations during inference
         self.group_id_map = {

@@ -200,9 +200,10 @@ def plot_feature_distributions_by_condition(
         elif plot_type in ["boxplot", "violinplot"]:
             plot_data = []
             for label, condition in zip(group_labels, group_conditions):
-                temp_df = pd.DataFrame(
-                    {feature: data[condition][feature].dropna(), "group": label}
-                )
+                temp_df = pd.DataFrame({
+                    feature: data[condition][feature].dropna(),
+                    "group": label,
+                })
                 plot_data.append(temp_df)
             plot_data = pd.concat(plot_data, ignore_index=True)
 

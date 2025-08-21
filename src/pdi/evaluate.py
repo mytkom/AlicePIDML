@@ -143,16 +143,14 @@ def get_interval_purity_efficiency(
         confidence_intervals = pd.concat(
             [
                 confidence_intervals,
-                pd.DataFrame(
-                    [
-                        {
-                            "purity_lower": p_ci[0],
-                            "purity_upper": p_ci[1],
-                            "efficiency_lower": e_ci[0],
-                            "efficiency_upper": e_ci[1],
-                        }
-                    ]
-                ),
+                pd.DataFrame([
+                    {
+                        "purity_lower": p_ci[0],
+                        "purity_upper": p_ci[1],
+                        "efficiency_lower": e_ci[0],
+                        "efficiency_upper": e_ci[1],
+                    }
+                ]),
             ],
             ignore_index=True,
         )

@@ -18,9 +18,9 @@ class InsertionStrategy:
 
 class MeanInsertion(InsertionStrategy):
     def __call__(self, prepared_data: PreparedData) -> PreparedData:
-        ungrouped_train_data = pd.concat(
-            [group[InputTarget.INPUT] for group in prepared_data[Split.TRAIN].values()]
-        )
+        ungrouped_train_data = pd.concat([
+            group[InputTarget.INPUT] for group in prepared_data[Split.TRAIN].values()
+        ])
         means = ungrouped_train_data.mean()
 
         for split_data in prepared_data.values():

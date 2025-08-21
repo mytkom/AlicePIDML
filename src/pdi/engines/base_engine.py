@@ -51,7 +51,9 @@ class BaseEngine:
             self._base_dir = os.path.join(project_target_path, f"run_{run_number}")
 
         # Dump config to base_dir
-        with open(os.path.join(self._base_dir, "config.json"), "w", encoding="utf-8") as config_file:
+        with open(
+            os.path.join(self._base_dir, "config.json"), "w", encoding="utf-8"
+        ) as config_file:
             config_dict = dataclasses.asdict(self._cfg)
             json.dump(config_dict, config_file, indent=4)
 
@@ -169,7 +171,9 @@ class BaseEngine:
                 map_location=self._cfg.training.device,
             )
         )
-        with open(os.path.join(dirpath, "metadata.json"), "r", encoding="utf-8") as metadata_file:
+        with open(
+            os.path.join(dirpath, "metadata.json"), "r", encoding="utf-8"
+        ) as metadata_file:
             metadata = json.load(metadata_file)
 
         return skeleton_model, float(metadata["threshold"])

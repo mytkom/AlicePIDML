@@ -554,21 +554,16 @@ class DataPreparation:
             )
 
         targets = (
-            pd.concat(
-                [
-                    v[InputTarget.TARGET]
-                    for v in self._prepared_data[Split.TEST].values()
-                ]
-            )
+            pd.concat([
+                v[InputTarget.TARGET] for v in self._prepared_data[Split.TEST].values()
+            ])
             .to_numpy()
             .squeeze()
         )
-        unstandardized = pd.concat(
-            [
-                v[InputTarget.UNSTANDARDIZED]
-                for v in self._prepared_data[Split.TEST].values()
-            ]
-        )
+        unstandardized = pd.concat([
+            v[InputTarget.UNSTANDARDIZED]
+            for v in self._prepared_data[Split.TEST].values()
+        ])
 
         nsigma_normalized_all = self._calc_nsigma_normalized(
             unstandardized, self.DEFAULT_NSIGMA_THRESHOLD
@@ -762,15 +757,13 @@ class DataPreparation:
 
         with open(f"{dir}/dataset_metadata.json", "w+", encoding="UTF-8") as f:
             f.write(
-                json.dumps(
-                    {
-                        "is_experimental": self._is_experimental,
-                        "is_extended": self._is_extended,
-                        "input_paths": self._input_paths,
-                        "data_config": dataclasses.asdict(self._cfg),
-                        "seed": self._seed,
-                    }
-                )
+                json.dumps({
+                    "is_experimental": self._is_experimental,
+                    "is_extended": self._is_extended,
+                    "input_paths": self._input_paths,
+                    "data_config": dataclasses.asdict(self._cfg),
+                    "seed": self._seed,
+                })
             )
 
         with open(f"{dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
