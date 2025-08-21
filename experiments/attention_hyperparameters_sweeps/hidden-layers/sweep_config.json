@@ -37,7 +37,7 @@
                 },
                 "encoder_ff_hidden": {
                   "values": [
-                    128,
+                    128
                   ]
                 },
                 "pool_hidden_layers": {
@@ -48,12 +48,12 @@
                 },
                 "num_heads": {
                   "values": [
-                    2,
+                    2
                   ]
                 },
                 "num_blocks": {
                   "values": [
-                    2,
+                    2
                   ]
                 }
               }

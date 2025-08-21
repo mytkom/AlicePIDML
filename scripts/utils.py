@@ -53,8 +53,8 @@ def engine_single_run(config: Config, target_code: int, test: bool, sweep: bool)
     sweep_config = None
     # Initialize logging in wandb
     if sweep:
-        sweep_config = wandb.config["sweep"]
         wandb.init(name=particle_name)
+        sweep_config = wandb.config["sweep"]
         merge_configs(config, wandb.config["sweep"])
         print(f"Sweep config: {wandb.config['sweep']}")
         wandb.config.update(dataclasses.asdict(config))
