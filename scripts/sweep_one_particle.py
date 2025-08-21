@@ -58,7 +58,7 @@ if __name__ == "__main__":
             "sweep_config": sweep_config
         })
 
-        with open(output_file_path, "w") as output_file:
+        with open(output_file_path, "w+") as output_file:
             json.dump(sweep_metadata, output_file, indent=4)
         print(f"Updated metadata saved to {cli_config.output_file}")
 
