@@ -1,7 +1,7 @@
 import tyro
 import json
 import hashlib
-from scripts.utils import dump_default_config, engine_single_run, load_config
+from utils import dump_default_config, engine_single_run, load_config
 from pdi.constants import PART_NAME_TO_TARGET_CODE
 from pathlib import Path
 from pdi.config import AllParticlesConfig
