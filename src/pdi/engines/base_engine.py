@@ -95,15 +95,24 @@ class BaseEngine:
         dirpath = os.path.join(self._base_dir, "model_weights")
         os.makedirs(dirpath, exist_ok=True)
 
+        artifact = wandb.Artifact("best_model", type="model")
+
         model.to("cpu")
-        torch.save(model.state_dict(), os.path.join(dirpath, "best.pt"))
-        with open(os.path.join(dirpath, f"metadata.json"), "w") as metadata_file:
+        model_path = os.path.join(dirpath, "best.pt")
+        torch.save(model.state_dict(), model_path)
+
+        artifact.add_file(model_path)
+
+        metadata_path = os.path.join(dirpath, f"metadata.json")
+        with open(metadata_path, "w") as metadata_file:
             json.dump({
                 "threshold": str(threshold),
                 "epoch": str(epoch),
                 "best_f1": str(self._best_f1),
                 "model_class": model.__class__.__name__,
             }, metadata_file, indent=4)
+
+        artifact.add_file(metadata_path)
 
         # Export ONNX
         onnx_path = os.path.join(dirpath, "model.onnx")
@@ -117,7 +126,10 @@ class BaseEngine:
                           output_names=["output"],
                           dynamic_axes={"input": {0: 'batch size'}})
 
+        artifact.add_file(onnx_path)
+
         model.to(self._cfg.training.device)
+        wandb.log_artifact(artifact)
 
     def _load_model(self, skeleton_model: nn.Module, dirpath: Optional[str] = None) -> tuple[nn.Module, float]:
         """

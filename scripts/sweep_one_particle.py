@@ -21,7 +21,7 @@ if __name__ == "__main__":
         output_dir = Path("training_runs")
         output_dir.mkdir(exist_ok=True)
         cli_config.output_file = str(output_dir / f"sweep_{checksum}.json")
-        
+
     output_file_path = str(Path(cli_config.output_file).resolve())
 
     if cli_config.config:

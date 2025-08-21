@@ -62,6 +62,7 @@ def engine_single_run(config: Config, target_code: int, test: bool, sweep: bool)
         wandb.init(name=particle_name, config=dataclasses.asdict(config))
 
     engine: BaseEngine = build_engine(config, target_code)
+    wandb.log({"base_dir": engine._base_dir})
 
     print(f"Running training for {particle_name}.")
     engine.train()
