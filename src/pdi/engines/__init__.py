@@ -10,10 +10,15 @@ __all__ = [
     "BaseEngine",
 ]
 
-def build_engine(cfg: Config, target_code: int, base_dir: str | None = None) -> BaseEngine:
+
+def build_engine(
+    cfg: Config, target_code: int, base_dir: str | None = None
+) -> BaseEngine:
     if cfg.model.architecture in ["mlp", "ensemble", "attention"]:
         return ClassicEngine(cfg, target_code, base_dir)
     elif cfg.model.architecture in ["attention_dann"]:
         return DomainAdaptationEngine(cfg, target_code, base_dir)
     else:
-        raise KeyError(f"There is no suitable engine for model architecture: {cfg.model.architecture}! Add one.")
+        raise KeyError(
+            f"There is no suitable engine for model architecture: {cfg.model.architecture}! Add one."
+        )

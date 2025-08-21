@@ -5,24 +5,31 @@ from typing import List, Literal, Optional
 
 from dataclass_wizard import JSONPyWizard
 
+
 # TODO: describe those methods here and fill config fields
 @dataclasses.dataclass
 class OCSVMConfig:
     pass
 
+
 @dataclasses.dataclass
 class IsolationForestConfig:
     pass
+
 
 @dataclasses.dataclass
 class IQRConfig:
     pass
 
+
 @dataclasses.dataclass
 class OutlierFilteringConfig:
     ocsvm: OCSVMConfig = dataclasses.field(default_factory=OCSVMConfig)
-    isolation_forest: IsolationForestConfig = dataclasses.field(default_factory=IsolationForestConfig)
+    isolation_forest: IsolationForestConfig = dataclasses.field(
+        default_factory=IsolationForestConfig
+    )
     iqr: IQRConfig = dataclasses.field(default_factory=IQRConfig)
+
 
 # Config related to data preparation process:
 # - preprocessing
@@ -31,7 +38,9 @@ class OutlierFilteringConfig:
 @dataclasses.dataclass
 class DataConfig:
     # TODO: describe outlier filtering and options here
-    outlier_filtering_methods: OutlierFilteringConfig = dataclasses.field(default_factory=OutlierFilteringConfig)
+    outlier_filtering_methods: OutlierFilteringConfig = dataclasses.field(
+        default_factory=OutlierFilteringConfig
+    )
     outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation forest"] = None
 
     # Train/Validation/Test dataset split ratios. Validation is calculated automatically 1 - train_size - test_size
@@ -42,11 +51,13 @@ class DataConfig:
     # Is it data from ALICE Run 3? Different missing values of signals are dependant of this setting.
     is_run_3: bool = True
 
+
 @dataclasses.dataclass
 class AdamWConfig:
     # Weight decay is regularisation method, it prevents overfitting, but with
     # suboptimal value can degrade model performance, use it wisely
     weight_decay: float = 0.0
+
 
 @dataclasses.dataclass
 class SGDConfig:
@@ -54,14 +65,17 @@ class SGDConfig:
     weight_decay: float = 0.0
     nesterov: bool = True
 
+
 @dataclasses.dataclass
 class OptimizersConfig:
     adamw: AdamWConfig = dataclasses.field(default_factory=AdamWConfig)
     sgd: SGDConfig = dataclasses.field(default_factory=SGDConfig)
 
+
 @dataclasses.dataclass
 class ExponentialLRConfig:
     gamma: float = 0.9
+
 
 @dataclasses.dataclass
 class CosineRestartsLRConfig:
@@ -71,9 +85,11 @@ class CosineRestartsLRConfig:
     # Number of epochs to be increased for every new cycle to the last value
     cycle_epoch_inc: int = 5
 
+
 @dataclasses.dataclass
 class PolynomialLRConfig:
     power: float = 1.0
+
 
 @dataclasses.dataclass
 class ConstantLRConfig:
@@ -82,12 +98,20 @@ class ConstantLRConfig:
     # Total iterations (epochs) for which factor will be applied
     total_iters: int = 50
 
+
 @dataclasses.dataclass
 class LRSchedulersConfig:
-    exponential: ExponentialLRConfig = dataclasses.field(default_factory=ExponentialLRConfig)
-    cosine_restarts: CosineRestartsLRConfig = dataclasses.field(default_factory=CosineRestartsLRConfig)
-    polynomial: PolynomialLRConfig = dataclasses.field(default_factory=PolynomialLRConfig)
+    exponential: ExponentialLRConfig = dataclasses.field(
+        default_factory=ExponentialLRConfig
+    )
+    cosine_restarts: CosineRestartsLRConfig = dataclasses.field(
+        default_factory=CosineRestartsLRConfig
+    )
+    polynomial: PolynomialLRConfig = dataclasses.field(
+        default_factory=PolynomialLRConfig
+    )
     constant: ConstantLRConfig = dataclasses.field(default_factory=ConstantLRConfig)
+
 
 @dataclasses.dataclass
 class ValidationConfig:
@@ -106,8 +130,12 @@ class TrainingConfig:
     optimizer: Literal["adamw", "sgd"] = "adamw"
 
     # Choose learning rate scheduler
-    lr_schedulers: LRSchedulersConfig = dataclasses.field(default_factory=LRSchedulersConfig)
-    lr_scheduler: Literal["exponential", "cosine_restarts", "polynomial", "constant"] | None = "exponential"
+    lr_schedulers: LRSchedulersConfig = dataclasses.field(
+        default_factory=LRSchedulersConfig
+    )
+    lr_scheduler: (
+        Literal["exponential", "cosine_restarts", "polynomial", "constant"] | None
+    ) = "exponential"
 
     # Loss (risk) function to be minimized
     loss: Literal["cross entropy"] = "cross entropy"
@@ -134,7 +162,7 @@ class TrainingConfig:
 
     # Defines what is progress in loss minimization; if (1 - current_loss / min_loss > threshold),
     # then epochs without progress counter is being reset
-    early_stopping_progress_threshold: float = .001
+    early_stopping_progress_threshold: float = 0.001
 
     # Number of subprocesses (or threads idk) pre-loading batches in parallel and delivering it
     # to main training process. It can speed up training process with drawback of bigger CPU
@@ -158,10 +186,13 @@ class TrainingConfig:
 def mlp_default_hidden_layers():
     return [64, 32, 16]
 
+
 @dataclasses.dataclass
 class MLPConfig:
     # List of dimensions of hidden layers of MLP network (first and last layer are automatically set)
-    hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
 
     # delete is equivalent complete-only data, mean fills missing cells with mean of this column
     # on the whole dataset and linear regression fills missing values by linear regression over
@@ -174,13 +205,16 @@ class MLPConfig:
     # Dropout, regularisation term for Neural Network
     dropout: float = 0.9
 
+
 @dataclasses.dataclass
 class EnsembleConfig:
     # ids of groups of missing detectors
     group_ids: List[int] = dataclasses.field(default_factory=list)
 
     # List of neurons in layer dimensions of hidden layers, input and output is fixed
-    hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
 
     # Choose non-linear activation function to be used after each layer
     activation: Literal["ReLU"] = "ReLU"
@@ -188,17 +222,24 @@ class EnsembleConfig:
     # Dropout, regularisation term for Neural Network
     dropout: float = 0.9
 
+
 @dataclasses.dataclass
 class AttentionConfig:
     # Embedding dimension and hidden dimension for MLP doing preliminary embedding settings
-    embed_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    embed_hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
     embed_dim: int = 32
 
     encoder_ff_hidden: int = 128
-    mlp_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    mlp_hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
 
     # Pooling dimension of AttentionPooling module (see models.py for more details)
-    pool_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    pool_hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
 
     # Number of heads in multi-head attention
     num_heads: int = 2
@@ -212,10 +253,13 @@ class AttentionConfig:
     # Dropout for feed-forward network - regularisation
     dropout: float = 0.4
 
+
 @dataclasses.dataclass
 class AttentionDANNConfig:
     # List of hidden layers sizes (number of neurons in each layer) for domain classifier
-    dom_hidden_layers: List[int] = dataclasses.field(default_factory=mlp_default_hidden_layers)
+    dom_hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
 
     # Standard Attention model configuration
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
@@ -234,13 +278,17 @@ class ModelConfig:
     # - ensemble: ensemble of MLPs, one for each missing detector combination (4 combinations)
     # - attention: attention-based neural network, it can handle missing data by one-hot encoding of input
     # - attention_dann: attention-based neural network with domain adversarial neural network approach (domain classifier added)
-    architecture: Literal["mlp", "ensemble", "attention", "attention_dann"] = "attention"
+    architecture: Literal["mlp", "ensemble", "attention", "attention_dann"] = (
+        "attention"
+    )
 
     # Configurations of all architectures:
     mlp: MLPConfig = dataclasses.field(default_factory=MLPConfig)
     ensemble: EnsembleConfig = dataclasses.field(default_factory=EnsembleConfig)
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
-    attention_dann: AttentionDANNConfig = dataclasses.field(default_factory=AttentionDANNConfig)
+    attention_dann: AttentionDANNConfig = dataclasses.field(
+        default_factory=AttentionDANNConfig
+    )
 
     # TODO: not implemented yet, will be great to test more sophisticated multistage training
     #   flows---like in TabICL
@@ -248,6 +296,7 @@ class ModelConfig:
     # directory with best.pt weights and metadata.json files of the model. Make sure to
     # set correct architecture for your weights.
     pretrained_model_dirpath: Optional[str] = None
+
 
 @dataclasses.dataclass
 class SweepConfig:
@@ -259,6 +308,7 @@ class SweepConfig:
 
     # Name of the project in WandB
     project_name: str = "default_project"
+
 
 @dataclasses.dataclass
 class Config(JSONPyWizard):
@@ -287,13 +337,17 @@ class Config(JSONPyWizard):
     seed: int = 0
     config_path: Optional[str] = None
 
+
 @dataclasses.dataclass
 class OneParticleConfig:
     output_file: Optional[str] = None
     # If to run evaluation on test dataset and save results after training
     test: bool = True
     config: Optional[str] = None
-    particle: Literal["pion", "kaon", "proton", "antipion", "antikaon", "antiproton"] = "pion"
+    particle: Literal[
+        "pion", "kaon", "proton", "antipion", "antikaon", "antiproton"
+    ] = "pion"
+
 
 @dataclasses.dataclass
 class AllParticlesConfig:
@@ -311,5 +365,3 @@ class AllParticlesConfig:
     antipion: Optional[str] = None
     antikaon: Optional[str] = None
     antiproton: Optional[str] = None
-
-

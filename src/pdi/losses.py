@@ -5,6 +5,7 @@ from torch.nn.modules.loss import _Loss
 
 from pdi.config import TrainingConfig
 
+
 def build_loss(cfg: TrainingConfig, pos_weight: Optional[Tensor] = None) -> _Loss:
     if cfg.loss == "cross entropy":
         if pos_weight:

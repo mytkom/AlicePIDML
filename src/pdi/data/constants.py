@@ -1,5 +1,5 @@
-"""This module contains project constants related to the used data.
-"""
+"""This module contains project constants related to the used data."""
+
 from pdi.data.types import GroupID
 
 
@@ -12,10 +12,22 @@ PART_DICT = {
 }
 
 COLUMNS_FOR_TRAINING = [
-    "fTPCSignal", "fTRDPattern", "fTOFSignal",
-    "fBeta", "fP", "fPx", "fPy", "fPz",
-    "fSign", "fX", "fY", "fZ", "fAlpha",
-    "fTPCNClsShared", "fDcaXY", "fDcaZ"
+    "fTPCSignal",
+    "fTRDPattern",
+    "fTOFSignal",
+    "fBeta",
+    "fP",
+    "fPx",
+    "fPy",
+    "fPz",
+    "fSign",
+    "fX",
+    "fY",
+    "fZ",
+    "fAlpha",
+    "fTPCNClsShared",
+    "fDcaXY",
+    "fDcaZ",
 ]
 N_COLUMNS = len(COLUMNS_FOR_TRAINING)
 

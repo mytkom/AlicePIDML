@@ -14,6 +14,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
+
 def plot_cor_matrix(df: pd.DataFrame, title: str) -> Figure:
     """
     Plot the correlation matrix of a DataFrame.
@@ -39,6 +40,7 @@ def plot_cor_matrix(df: pd.DataFrame, title: str) -> Figure:
     plt.title(f"Correlation matrix {title}")
 
     return ax.figure
+
 
 # Feature importance
 def explain_model(
@@ -90,10 +92,11 @@ def plot_and_save_beeswarm(result, save_dir: str, file_name: str, title: str):
     plt.savefig(os.path.join(save_dir, file_name), bbox_inches="tight")
     plt.show()
 
+
 def generate_figure_thumbnails_from_iterator(
     figure_iter: Iterator[Tuple[Figure, str]],
     save_path: str,
-    thumbnail_width: int = 300
+    thumbnail_width: int = 300,
 ) -> HTML:
     """
     Accepts a generator yielding (fig, filename) pairs, saves them, and returns thumbnail HTML.
@@ -109,13 +112,13 @@ def generate_figure_thumbnails_from_iterator(
 
     for fig, filename in figure_iter:
         filepath = os.path.abspath(os.path.join(save_path, filename))
-        fig.savefig(filepath, dpi=300, bbox_inches='tight')
+        fig.savefig(filepath, dpi=300, bbox_inches="tight")
 
         # Save to buffer for thumbnail
         buf = BytesIO()
-        fig.savefig(buf, format='png', dpi=200)
+        fig.savefig(buf, format="png", dpi=200)
         buf.seek(0)
-        b64 = base64.b64encode(buf.read()).decode('utf-8')
+        b64 = base64.b64encode(buf.read()).decode("utf-8")
         fig.clf()
         plt.close(fig)
 
@@ -126,7 +129,12 @@ def generate_figure_thumbnails_from_iterator(
         )
         thumbnails.append(html)
 
-    return HTML("<div style='display:flex; flex-wrap: wrap; gap: 10px;'>" + "\n".join(thumbnails) + "</div>")
+    return HTML(
+        "<div style='display:flex; flex-wrap: wrap; gap: 10px;'>"
+        + "\n".join(thumbnails)
+        + "</div>"
+    )
+
 
 def plot_feature_distributions_by_condition(
     data: pd.DataFrame,
@@ -158,29 +166,33 @@ def plot_feature_distributions_by_condition(
         ax.set_title(title_template.format(feature=feature), fontsize=14)
 
         if log_y:
-            ax.set_yscale('log')
+            ax.set_yscale("log")
 
         if plot_type == "kde":
-            for (label, condition), color in zip(zip(group_labels, group_conditions), palette):
+            for (label, condition), color in zip(
+                zip(group_labels, group_conditions), palette
+            ):
                 sns.kdeplot(
                     data[condition][feature].dropna(),
                     label=label,
                     fill=True,
                     common_norm=True,
                     color=color,
-                    ax=ax
+                    ax=ax,
                 )
             ax.set_xlabel(feature)
             ax.set_ylabel("Density" if not log_y else "Log Density")
 
         elif plot_type == "hist":
-            for (label, condition), color in zip(zip(group_labels, group_conditions), palette):
+            for (label, condition), color in zip(
+                zip(group_labels, group_conditions), palette
+            ):
                 ax.hist(
                     data[condition][feature].dropna(),
                     bins=hist_bins,
                     alpha=0.7,
                     label=label,
-                    color=color
+                    color=color,
                 )
             ax.set_xlabel(feature)
             ax.set_ylabel("Count" if not log_y else "Log Count")
@@ -188,32 +200,39 @@ def plot_feature_distributions_by_condition(
         elif plot_type in ["boxplot", "violinplot"]:
             plot_data = []
             for label, condition in zip(group_labels, group_conditions):
-                temp_df = pd.DataFrame({
-                    feature: data[condition][feature].dropna(),
-                    "group": label
-                })
+                temp_df = pd.DataFrame(
+                    {feature: data[condition][feature].dropna(), "group": label}
+                )
                 plot_data.append(temp_df)
             plot_data = pd.concat(plot_data, ignore_index=True)
 
             if plot_type == "boxplot":
-                sns.boxplot(x="group", y=feature, data=plot_data, hue="group", palette=palette, ax=ax)
+                sns.boxplot(
+                    x="group",
+                    y=feature,
+                    data=plot_data,
+                    hue="group",
+                    palette=palette,
+                    ax=ax,
+                )
             else:
-                sns.violinplot(x="group", y=feature, data=plot_data, palette=palette, cut=0, ax=ax)
+                sns.violinplot(
+                    x="group", y=feature, data=plot_data, palette=palette, cut=0, ax=ax
+                )
 
             ax.set_xlabel("Group")
             ax.set_ylabel(feature)
 
         elif plot_type == "ecdf":
-            for (label, condition), color in zip(zip(group_labels, group_conditions), palette):
+            for (label, condition), color in zip(
+                zip(group_labels, group_conditions), palette
+            ):
                 sns.ecdfplot(
-                    data[condition][feature].dropna(),
-                    label=label,
-                    color=color,
-                    ax=ax
+                    data[condition][feature].dropna(), label=label, color=color, ax=ax
                 )
             ax.set_xlabel(feature)
             ax.set_ylabel("ECDF" if not log_y else "Log ECDF")
-            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.grid(True, linestyle="--", alpha=0.7)
 
         if plot_type in ["kde", "hist", "ecdf"]:
             ax.legend(fontsize=10, framealpha=1)
@@ -223,6 +242,7 @@ def plot_feature_distributions_by_condition(
         file_name = f"{feature}_{plot_type}{'_logY' if log_y else ''}.png"
 
         yield fig, file_name
+
 
 def plot_feature_histogram2d_combinations(
     data: pd.DataFrame,
@@ -253,7 +273,10 @@ def plot_feature_histogram2d_combinations(
             data[feature1],
             data[feature2],
             bins=bins,
-            range=[[data[feature1].min(), data[feature1].max()], [data[feature2].min(), data[feature2].max()]],
+            range=[
+                [data[feature1].min(), data[feature1].max()],
+                [data[feature2].min(), data[feature2].max()],
+            ],
         )
 
         # Filter out low-density regions to set axis ranges
@@ -264,10 +287,12 @@ def plot_feature_histogram2d_combinations(
 
         # Create the plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.set_title(title_template.format(feature1=feature1, feature2=feature2), fontsize=14)
+        ax.set_title(
+            title_template.format(feature1=feature1, feature2=feature2), fontsize=14
+        )
         ax.set_xlabel(feature1)
         ax.set_ylabel(feature2)
-        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.grid(True, linestyle="--", alpha=0.7)
 
         # Plot the histogram with logarithmic z-axis
         im = ax.hist2d(
@@ -286,6 +311,7 @@ def plot_feature_histogram2d_combinations(
         # Generate file name
         file_name = f"{feature1}_{feature2}_hist2d.png"
         yield fig, file_name
+
 
 def plot_feature_combinations(
     data: pd.DataFrame,
@@ -317,35 +343,55 @@ def plot_feature_combinations(
         condition_legend = ("", "")
 
     # feature pairs
-    feature_pairs = features if isinstance(features[0], tuple) else combinations(features, 2)
+    feature_pairs = (
+        features if isinstance(features[0], tuple) else combinations(features, 2)
+    )
 
     def create_scatter_plot(feature1, feature2):
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.set_title(title_template.format(feature1=feature1, feature2=feature2), fontsize=14)
-        
+        ax.set_title(
+            title_template.format(feature1=feature1, feature2=feature2), fontsize=14
+        )
+
         # Map condition to colors (e.g., 0 -> blue, 1 -> red)
-        colors = np.where(condition, 'red', 'blue')
+        colors = np.where(condition, "red", "blue")
         ax.scatter(data[feature1], data[feature2], c=colors, alpha=alpha, s=size)
-        
+
         # Set x-axis limits to include 95% of the data points
         x_min, x_max = np.percentile(data[feature1].dropna(), [0.0, 95.0])
         ax.set_xlim(x_min, x_max)
-        
+
         if log_scale_y:
-            ax.set_yscale('log')
+            ax.set_yscale("log")
         if log_scale_x:
-            ax.set_xscale('log')
+            ax.set_xscale("log")
         ax.set_xlabel(feature1)
         ax.set_ylabel(feature2)
         ax.tick_params(labelsize=10)
-        
+
         if condition_legend != ("", ""):
             legend_elements = [
-                Line2D([0], [0], marker='o', color='w', label=condition_legend[0], markerfacecolor='blue', markersize=8),
-                Line2D([0], [0], marker='o', color='w', label=condition_legend[1], markerfacecolor='red', markersize=8)
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    label=condition_legend[0],
+                    markerfacecolor="blue",
+                    markersize=8,
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    label=condition_legend[1],
+                    markerfacecolor="red",
+                    markersize=8,
+                ),
             ]
             ax.legend(handles=legend_elements)
-        
+
         fig.tight_layout()
         return fig
 
@@ -354,6 +400,7 @@ def plot_feature_combinations(
         fig = create_scatter_plot(feature1, feature2)
         file_name = f"{feature1}_vs_{feature2}.png"
         yield fig, file_name
+
 
 def plot_group_ratio(
     group_labels: list[str],
@@ -376,16 +423,21 @@ def plot_group_ratio(
     group_counts = [sum(condition) for condition in group_conditions]
     total_count = sum(group_counts)
     group_ratios = [count / total_count for count in group_counts]
-    sorted_data = sorted(zip(group_labels, group_ratios), key=lambda x: x[1], reverse=True)
+    sorted_data = sorted(
+        zip(group_labels, group_ratios), key=lambda x: x[1], reverse=True
+    )
     group_labels, group_ratios = zip(*sorted_data)
 
     fig = plt.figure(figsize=(8, 4))
 
     if plot_type == "pie":
-        group_percentages = [f"{label}: {ratio * 100:.2f}%" for label, ratio in zip(group_labels, group_ratios)]
+        group_percentages = [
+            f"{label}: {ratio * 100:.2f}%"
+            for label, ratio in zip(group_labels, group_ratios)
+        ]
         gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
 
-        fig.suptitle(title, fontsize=14, y=1.05, ha='center')
+        fig.suptitle(title, fontsize=14, y=1.05, ha="center")
 
         ax1 = fig.add_subplot(gs[0])
         ax1.axis("off")
@@ -393,8 +445,14 @@ def plot_group_ratio(
         wedges, _ = ax1.pie(group_ratios, startangle=180)
 
         ax2 = fig.add_subplot(gs[1])
-        ax2.axis('off')
-        ax2.legend(wedges, group_percentages, loc='center', bbox_to_anchor=(0.3,0.5), fontsize=12)
+        ax2.axis("off")
+        ax2.legend(
+            wedges,
+            group_percentages,
+            loc="center",
+            bbox_to_anchor=(0.3, 0.5),
+            fontsize=12,
+        )
 
         gs.update(wspace=0.1, top=0.95, left=0.1, right=0.9, bottom=0.1)
     elif plot_type == "bar":

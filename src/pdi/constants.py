@@ -1,5 +1,4 @@
-"""This module contains project constants used in the experiments.
-"""
+"""This module contains project constants used in the experiments."""
 
 TARGET_CODE_TO_PART_NAME = {
     11: "electron",
@@ -15,7 +14,7 @@ TARGET_CODE_TO_PART_NAME = {
 }
 
 # Reverse dict
-PART_NAME_TO_TARGET_CODE = { v: k for k,v in TARGET_CODE_TO_PART_NAME.items() }
+PART_NAME_TO_TARGET_CODE = {v: k for k, v in TARGET_CODE_TO_PART_NAME.items()}
 
 # Only target codes (particle species' PDG codes) of our interes
 TARGET_CODES = [211, 2212, 321, -211, -2212, -321]

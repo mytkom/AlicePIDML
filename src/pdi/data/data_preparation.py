@@ -14,7 +14,16 @@ import torch
 import hashlib
 from pathlib import Path
 from random import Random
-from typing import Callable, Generic, Iterator, Tuple, TypeVar, Optional, List, MutableMapping
+from typing import (
+    Callable,
+    Generic,
+    Iterator,
+    Tuple,
+    TypeVar,
+    Optional,
+    List,
+    MutableMapping,
+)
 from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
@@ -43,6 +52,7 @@ MCBatchItemOut = tuple[Tensor, Tensor, Tensor, MutableMapping[str, Tensor]]
 ExpBatchItem = tuple[Tensor, GroupID, MutableMapping[str, Tensor]]
 # GroupID -> Tensor in typing https://github.com/pytorch/pytorch/issues/119123
 ExpBatchItemOut = tuple[Tensor, Tensor, MutableMapping[str, Tensor]]
+
 
 class MCDataset(Dataset[MCBatchItem]):
     """
@@ -148,6 +158,7 @@ class ExpDataset(Dataset[ExpBatchItem]):
 InT = TypeVar("InT")
 OutT = TypeVar("OutT")
 
+
 class CombinedDataLoader(Generic[InT, OutT]):
     """
     CombinedDataLoader combines multiple dataloaders, during iteration there
@@ -157,7 +168,9 @@ class CombinedDataLoader(Generic[InT, OutT]):
     same number of times---choice is sequential, not random like in default setting.
     """
 
-    def __init__(self, shuffle: bool, undersample: bool, seed: int, *dataloaders: DataLoader[InT]):
+    def __init__(
+        self, shuffle: bool, undersample: bool, seed: int, *dataloaders: DataLoader[InT]
+    ):
         """__init__
 
         Args:
@@ -176,13 +189,13 @@ class CombinedDataLoader(Generic[InT, OutT]):
         end_iteration = False
         if self.undersample:
             while True:
-               for it in iters:
+                for it in iters:
                     try:
                         yield next(it)
                     except StopIteration:
                         end_iteration = True
-               if end_iteration:
-                   break
+                if end_iteration:
+                    break
             return
 
         if self.shuffle:
@@ -220,11 +233,11 @@ class CombinedDataLoader(Generic[InT, OutT]):
             warnings.warn(
                 "Unwrapping shuffled CombinedDataLoader. The resulting data may differ from iterating over the dataloader."
             )
-    
+
         # Collect data from each dataloader
         data_records = []
-        min_len = float('inf')  # Initialize to infinity for finding the minimum length
-    
+        min_len = float("inf")  # Initialize to infinity for finding the minimum length
+
         for dataloader in self.dataloaders:
             dataset = dataloader.dataset
             if isinstance(dataset, (MCDataset, ExpDataset)):
@@ -234,14 +247,24 @@ class CombinedDataLoader(Generic[InT, OutT]):
                 raise AttributeError(
                     "Cannot unwrap CombinedDataLoader. Unexpected Dataset class."
                 )
-    
+
         # Apply undersampling if enabled
         if self.undersample:
-            data_records = [df.iloc[self.rng.sample(range(len(df)), int(min(len(df), min_len)))] for df in data_records]
-    
+            data_records = [
+                df.iloc[self.rng.sample(range(len(df)), int(min(len(df), min_len)))]
+                for df in data_records
+            ]
+
         # Concatenate all data into a single DataFrame
         return pd.concat(data_records, ignore_index=True)
-def calculate_checksum(filenames: list[str], config: DataConfig, seed: int, scaling_params: Optional[pd.DataFrame] = None) -> str:
+
+
+def calculate_checksum(
+    filenames: list[str],
+    config: DataConfig,
+    seed: int,
+    scaling_params: Optional[pd.DataFrame] = None,
+) -> str:
     """
     Calculate a checksum based on the contents of the given files, a config object and seed.
 
@@ -267,45 +290,53 @@ def calculate_checksum(filenames: list[str], config: DataConfig, seed: int, scal
     if scaling_params is not None:
         dict_config["scaling_params"] = scaling_params.to_dict()
     config_json = json.dumps(dict_config, sort_keys=True)
-    hash.update(config_json.encode('utf-8'))
+    hash.update(config_json.encode("utf-8"))
 
     return hash.hexdigest()
+
 
 def is_experimental_data(table_name):
     if "mc" in table_name:
         return False
     return True
 
+
 def is_extended_data(table_name):
     if "ml" in table_name:
         return False
     return True
 
+
 def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
     """
-        Load given list of root files into pandas DataFrame. This function automatically detect,
-        which out of possible tables is saved in files:
-            - O2pidtracksmcml - simulated data, only columns needed for ML training (feature space and labels),
-            - O2pidtracksmc - simulated data, more columns---it contains nSigma values,
-            - O2pidtracksdataml - experimental data, only columns needed for training (no labels available)
-            - O2pidtracksdata - experimental data, more columns---it contains nSigma values
+    Load given list of root files into pandas DataFrame. This function automatically detect,
+    which out of possible tables is saved in files:
+        - O2pidtracksmcml - simulated data, only columns needed for ML training (feature space and labels),
+        - O2pidtracksmc - simulated data, more columns---it contains nSigma values,
+        - O2pidtracksdataml - experimental data, only columns needed for training (no labels available)
+        - O2pidtracksdata - experimental data, more columns---it contains nSigma values
 
-        Args:
-            input_files (List[str]): List of paths to ROOT files to be loaded.
+    Args:
+        input_files (List[str]): List of paths to ROOT files to be loaded.
 
-        Returns:
-            data_with_metadata (Tuple[pd.DataFrame, bool, bool]):
-                - A pandas DataFrame containing the concatenated data from the ROOT files.
-                - A boolean indicating whether the data is experimental (True) or simulated (False).
-                - A boolean indicating whether the data is extended (True) or basic (False).
+    Returns:
+        data_with_metadata (Tuple[pd.DataFrame, bool, bool]):
+            - A pandas DataFrame containing the concatenated data from the ROOT files.
+            - A boolean indicating whether the data is experimental (True) or simulated (False).
+            - A boolean indicating whether the data is extended (True) or basic (False).
     """
     MISSING_VALUE_INDICATORS = {
         "fBeta": -999,
         "fTOFSignal": -999,
         "fTRDPattern": 0,
-        "fTRDSignal": 0
+        "fTRDSignal": 0,
     }
-    TABLE_NAMES=["O2pidtracksmcml", "O2pidtracksmc", "O2pidtracksdataml", "O2pidtracksdata"]
+    TABLE_NAMES = [
+        "O2pidtracksmcml",
+        "O2pidtracksmc",
+        "O2pidtracksdataml",
+        "O2pidtracksdata",
+    ]
 
     table_name: str | None = None
     dataframes = []
@@ -324,7 +355,9 @@ def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
                         except KeyError:
                             continue
                     if not table_name:
-                        raise KeyError(f"Table name in ROOT file must be in {TABLE_NAMES}")
+                        raise KeyError(
+                            f"Table name in ROOT file must be in {TABLE_NAMES}"
+                        )
 
                 tree_data = file[f"%s/{table_name}" % (dirname)].pandas.df()
                 dataframes.append(tree_data)
@@ -344,7 +377,9 @@ def load_root_data(input_files: List[str]) -> Tuple[pd.DataFrame, bool, bool]:
 
     return data, is_experimental_data(table_name), is_extended_data(table_name)
 
+
 PreparedData = dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]]
+
 
 class DataPreparation:
     """
@@ -383,9 +418,16 @@ class DataPreparation:
     """
 
     COLUMNS_TO_SCALE_RUN_3 = [
-        "fTPCSignal", "fTOFSignal",
-        "fBeta", "fX", "fY", "fZ", "fAlpha",
-        "fTPCNClsShared", "fDcaXY", "fDcaZ",
+        "fTPCSignal",
+        "fTOFSignal",
+        "fBeta",
+        "fX",
+        "fY",
+        "fZ",
+        "fAlpha",
+        "fTPCNClsShared",
+        "fDcaXY",
+        "fDcaZ",
     ]
 
     # TRDSignal scaling in run2
@@ -394,31 +436,41 @@ class DataPreparation:
     DEFAULT_NSIGMA_THRESHOLD = 3.0
 
     def __init__(
-            self,
-            config: DataConfig,
-            input_paths: List[str],
-            seed: int,
-            base_dir = PROCESSED_DIR,
-            scaling_params: Optional[pd.DataFrame] = None
+        self,
+        config: DataConfig,
+        input_paths: List[str],
+        seed: int,
+        base_dir=PROCESSED_DIR,
+        scaling_params: Optional[pd.DataFrame] = None,
     ) -> None:
         if len(input_paths) == 0:
             raise KeyError("You must specify at least one input_path with data!")
 
         # Calculate checsum for input_paths' files, so caching results will be reliable and unique for this set of files
         self._log("Calculating input_paths + configuration checksum:")
-        self._inputs_checksum = calculate_checksum(input_paths, config, seed, scaling_params)
+        self._inputs_checksum = calculate_checksum(
+            input_paths, config, seed, scaling_params
+        )
         self._log(f"\tresulting checksum: {self._inputs_checksum}")
         self.save_dir: str = f"{base_dir}/{self._inputs_checksum}"
         if scaling_params is not None:
             self._scaling_params: pd.DataFrame = scaling_params
         else:
-            self._scaling_params: pd.DataFrame = pd.DataFrame(columns=["column", "mean", "std"])
+            self._scaling_params: pd.DataFrame = pd.DataFrame(
+                columns=["column", "mean", "std"]
+            )
         self._cfg: DataConfig = config
         self._input_paths: List[str] = input_paths
         self._seed = seed
         self._columns_for_training: List[str] = []
-        self._columns_to_standardize: List[str] = self.COLUMNS_TO_SCALE_RUN_3 if config.is_run_3 else self.COLUMNS_TO_SCALE_RUN_2
-        self._prepared_data: dict[Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]] = {}
+        self._columns_to_standardize: List[str] = (
+            self.COLUMNS_TO_SCALE_RUN_3
+            if config.is_run_3
+            else self.COLUMNS_TO_SCALE_RUN_2
+        )
+        self._prepared_data: dict[
+            Split, dict[GroupID, dict[InputTarget, pd.DataFrame]]
+        ] = {}
 
     def prepare_data(self) -> None:
         """
@@ -450,7 +502,9 @@ class DataPreparation:
             self._calc_scaling_params(test_train_split[Split.TRAIN])
         else:
             if not self._scaling_params.size > 0:
-                raise AttributeError("[DataPreparation] For experimental data scaling params must be set in constructor!")
+                raise AttributeError(
+                    "[DataPreparation] For experimental data scaling params must be set in constructor!"
+                )
 
         self._prepared_data = {}
         for split, split_data in test_train_split.items():
@@ -467,10 +521,16 @@ class DataPreparation:
                 group_data: pd.DataFrame
 
                 # Split data into inputs, targets and additional unstandardized inputs with nSigma columns if available
-                self._prepared_data[split][gid] = self._input_target_unstandardized_split(group_data)
+                self._prepared_data[split][gid] = (
+                    self._input_target_unstandardized_split(group_data)
+                )
 
                 # Standardize inputs using previously calculated params
-                self._prepared_data[split][gid][InputTarget.INPUT] = self._standardize_data(self._prepared_data[split][gid][InputTarget.INPUT])
+                self._prepared_data[split][gid][InputTarget.INPUT] = (
+                    self._standardize_data(
+                        self._prepared_data[split][gid][InputTarget.INPUT]
+                    )
+                )
 
         # Cache prepared data using checksum calculated in constructor.
         self._save_data()
@@ -484,18 +544,40 @@ class DataPreparation:
 
         return self._prepared_data
 
-    def get_nsigma_test_results(self, target_code: int, threshold_unscaled: float = DEFAULT_NSIGMA_THRESHOLD) -> TestResults:
+    def get_nsigma_test_results(
+        self, target_code: int, threshold_unscaled: float = DEFAULT_NSIGMA_THRESHOLD
+    ) -> TestResults:
         self._load_or_prepare_data([Split.TEST])
 
         if not self._is_extended:
-            raise AttributeError("Data must be extended (contain nSigma columns) to calculate nSigma test results.")
+            raise AttributeError(
+                "Data must be extended (contain nSigma columns) to calculate nSigma test results."
+            )
 
-        targets = pd.concat([v[InputTarget.TARGET] for v in self._prepared_data[Split.TEST].values()]).to_numpy().squeeze()
-        unstandardized = pd.concat([v[InputTarget.UNSTANDARDIZED] for v in self._prepared_data[Split.TEST].values()])
+        targets = (
+            pd.concat(
+                [
+                    v[InputTarget.TARGET]
+                    for v in self._prepared_data[Split.TEST].values()
+                ]
+            )
+            .to_numpy()
+            .squeeze()
+        )
+        unstandardized = pd.concat(
+            [
+                v[InputTarget.UNSTANDARDIZED]
+                for v in self._prepared_data[Split.TEST].values()
+            ]
+        )
 
-        nsigma_normalized_all = self._calc_nsigma_normalized(unstandardized, self.DEFAULT_NSIGMA_THRESHOLD)
+        nsigma_normalized_all = self._calc_nsigma_normalized(
+            unstandardized, self.DEFAULT_NSIGMA_THRESHOLD
+        )
         nsigma_normalized_predictions, scaler = nsigma_normalized_all[target_code]
-        threshold_scaled = 1 - scaler.transform(np.array([[threshold_unscaled]])).squeeze()
+        threshold_scaled = (
+            1 - scaler.transform(np.array([[threshold_unscaled]])).squeeze()
+        )
 
         return TestResults(
             targets,
@@ -505,8 +587,16 @@ class DataPreparation:
         )
 
     def create_dataloaders(
-        self, batch_size: dict[Split, int], num_workers: dict[Split, int], undersample_missing_detectors: bool, undersample_pions: bool
-    ) -> tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]:
+        self,
+        batch_size: dict[Split, int],
+        num_workers: dict[Split, int],
+        undersample_missing_detectors: bool,
+        undersample_pions: bool,
+    ) -> tuple[
+        CombinedDataLoader[MCBatchItem, MCBatchItemOut]
+        | CombinedDataLoader[MCBatchItem, ExpBatchItemOut],
+        ...,
+    ]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
 
         Args:
@@ -530,33 +620,52 @@ class DataPreparation:
         if batch_size.keys() == num_workers.keys():
             splits = batch_size.keys()
         else:
-            raise AttributeError("batch_size and num_workers split keys must be the same!")
+            raise AttributeError(
+                "batch_size and num_workers split keys must be the same!"
+            )
 
         self._load_or_prepare_data(splits)
 
-        def create_dataset(input_target_unstandardized: dict[InputTarget, pd.DataFrame], gid, split):
+        def create_dataset(
+            input_target_unstandardized: dict[InputTarget, pd.DataFrame], gid, split
+        ):
             if self._is_experimental:
                 return ExpDataset(
-                    torch.tensor(input_target_unstandardized[InputTarget.INPUT].values, dtype=torch.float32),
+                    torch.tensor(
+                        input_target_unstandardized[InputTarget.INPUT].values,
+                        dtype=torch.float32,
+                    ),
                     gid,
                     **{
                         str(column): torch.tensor(val.values, dtype=torch.float32)
-                        for column, val in input_target_unstandardized[InputTarget.UNSTANDARDIZED].items()
+                        for column, val in input_target_unstandardized[
+                            InputTarget.UNSTANDARDIZED
+                        ].items()
                     },
                 )
 
             # Undersample (anti)pions to the next majority group in the training split
             # for simulated data.
             if split == Split.TRAIN and undersample_pions:
-                input_target_unstandardized = self._undersample_pions(input_target_unstandardized)
+                input_target_unstandardized = self._undersample_pions(
+                    input_target_unstandardized
+                )
 
             return MCDataset(
-                torch.tensor(input_target_unstandardized[InputTarget.INPUT].values, dtype=torch.float32),
-                torch.tensor(input_target_unstandardized[InputTarget.TARGET].values, dtype=torch.float32),
+                torch.tensor(
+                    input_target_unstandardized[InputTarget.INPUT].values,
+                    dtype=torch.float32,
+                ),
+                torch.tensor(
+                    input_target_unstandardized[InputTarget.TARGET].values,
+                    dtype=torch.float32,
+                ),
                 gid,
                 **{
                     str(column): torch.tensor(val.values, dtype=torch.float32)
-                    for column, val in input_target_unstandardized[InputTarget.UNSTANDARDIZED].items()
+                    for column, val in input_target_unstandardized[
+                        InputTarget.UNSTANDARDIZED
+                    ].items()
                 },
             )
 
@@ -573,11 +682,11 @@ class DataPreparation:
                 self._seed,
                 *[
                     DataLoader(
-                    dataset,
-                    batch_size=batch_size[split],
-                    shuffle=(split == Split.TRAIN),
-                    num_workers=num_workers[split],
-                    pin_memory=True,
+                        dataset,
+                        batch_size=batch_size[split],
+                        shuffle=(split == Split.TRAIN),
+                        num_workers=num_workers[split],
+                        pin_memory=True,
                     )
                     for dataset in datasets.values()
                 ],
@@ -585,7 +694,9 @@ class DataPreparation:
 
         return (*dataloaders.values(),)
 
-    def transform_prepared_data(self, transform: Callable[[PreparedData], PreparedData]):
+    def transform_prepared_data(
+        self, transform: Callable[[PreparedData], PreparedData]
+    ):
         """
         Handful interface for transforming self._prepared_data from outside. This method can
         be used to e.g. handle missing data imputation strategies.
@@ -612,7 +723,8 @@ class DataPreparation:
         self._load_or_prepare_data([Split.TRAIN])
 
         target_list = [
-            group[InputTarget.TARGET] for group in self._prepared_data[Split.TRAIN].values()
+            group[InputTarget.TARGET]
+            for group in self._prepared_data[Split.TRAIN].values()
         ]
         binary_targets = np.concatenate([targets == target for targets in target_list])
         pos_weight: float = (np.size(binary_targets) - np.sum(binary_targets)) / np.sum(
@@ -642,7 +754,6 @@ class DataPreparation:
 
         self.save_dataset_metadata(self.save_dir)
 
-
     def save_dataset_metadata(self, dir: str):
         self._scaling_params.to_json(
             f"{dir}/scaling_params.json",
@@ -664,18 +775,16 @@ class DataPreparation:
             )
 
         with open(f"{dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
-            f.write(
-                json.dumps(
-                    {"columns_for_training": COLUMNS_FOR_TRAINING}
-                )
-            )
+            f.write(json.dumps({"columns_for_training": COLUMNS_FOR_TRAINING}))
 
     def _load_data(self) -> pd.DataFrame:
         """
         Loads ROOT files in self._input_paths. Exracts metadata about dataset: a) if is experimental
         b) if is extended.
         """
-        data, self._is_experimental, self._is_extended = load_root_data(self._input_paths)
+        data, self._is_experimental, self._is_extended = load_root_data(
+            self._input_paths
+        )
 
         if self._is_experimental:
             self._log("Experimental data detected!")
@@ -685,7 +794,9 @@ class DataPreparation:
         if self._is_extended:
             self._log("Extended dataset detected (with nSigma columns)!")
         else:
-            self._log("Basic dataset detected (without nSigma columns---only ML inputs and targets)!")
+            self._log(
+                "Basic dataset detected (without nSigma columns---only ML inputs and targets)!"
+            )
 
         return data
 
@@ -740,19 +851,25 @@ class DataPreparation:
             data_not_test,
             train_size=train_to_val_ratio,
             random_state=self._seed,
-            stratify=None if self._is_experimental else data_not_test.loc[:, [TARGET_COLUMN]],
+            stratify=(
+                None if self._is_experimental else data_not_test.loc[:, [TARGET_COLUMN]]
+            ),
         )
 
         self._log(f"Dataset has been splitted in the following ratios:")
-        self._log(f"\tTrain {self._cfg.train_size}, Validation {1 - self._cfg.test_size - self._cfg.train_size:.2f}, Test {self._cfg.test_size}")
+        self._log(
+            f"\tTrain {self._cfg.train_size}, Validation {1 - self._cfg.test_size - self._cfg.train_size:.2f}, Test {self._cfg.test_size}"
+        )
 
         return {
             Split.TRAIN: pd.DataFrame(train_data),
             Split.VAL: pd.DataFrame(val_data),
-            Split.TEST: pd.DataFrame(test_data)
+            Split.TEST: pd.DataFrame(test_data),
         }
 
-    def _calc_nsigma_normalized(self, unstd: pd.DataFrame, threshold: float) -> dict[int, tuple[NDArray, MinMaxScaler]]:
+    def _calc_nsigma_normalized(
+        self, unstd: pd.DataFrame, threshold: float
+    ) -> dict[int, tuple[NDArray, MinMaxScaler]]:
         """
         Scale nsigma values to [0,1] and reverse meaning (1 - score). After such transformation predictions
         are behaving the same way as torch model predictions and data is transformed so provided threshold (e.g. < 3.0)
@@ -764,58 +881,92 @@ class DataPreparation:
             tof_n_sigmas = unstd[f"fTOFNSigma{PART_DICT[abs(target_code)]}"]
 
             # Apply nsigma formula
-            n_sigma_predictions= np.where(
+            n_sigma_predictions = np.where(
                 np.isnan(unstd["fTOFSignal"]),
                 np.abs(tpc_n_sigmas),
-                np.sqrt(tpc_n_sigmas**2 + tof_n_sigmas**2)
+                np.sqrt(tpc_n_sigmas**2 + tof_n_sigmas**2),
             )
 
             # minmax_scaler = MinMaxScaler(feature_range=(0,1))
-            minmax_scaler = MinMaxScaler(feature_range=(0,1))
+            minmax_scaler = MinMaxScaler(feature_range=(0, 1))
             # make transformed threshold ~0.5
-            n_sigma_predictions= np.where(n_sigma_predictions > threshold, threshold * 2, n_sigma_predictions)
+            n_sigma_predictions = np.where(
+                n_sigma_predictions > threshold, threshold * 2, n_sigma_predictions
+            )
             # make nsigmas to be in range 0 to 1
-            n_sigma_predictions_normalized = minmax_scaler.fit_transform(n_sigma_predictions.reshape(-1, 1)).squeeze()
+            n_sigma_predictions_normalized = minmax_scaler.fit_transform(
+                n_sigma_predictions.reshape(-1, 1)
+            ).squeeze()
             # reverse it so lower nSigma is higher result
             n_sigma_predictions_normalized = 1 - n_sigma_predictions_normalized
             # bad sign
-            nsigma_normalized[target_code] = np.where(unstd["fSign"] != np.sign(target_code), 0, n_sigma_predictions_normalized), minmax_scaler
+            nsigma_normalized[target_code] = (
+                np.where(
+                    unstd["fSign"] != np.sign(target_code),
+                    0,
+                    n_sigma_predictions_normalized,
+                ),
+                minmax_scaler,
+            )
 
         return nsigma_normalized
 
-    def _undersample_pions(self, input_target_unstandardized: dict[InputTarget, pd.DataFrame]) -> dict[InputTarget, pd.DataFrame]:
+    def _undersample_pions(
+        self, input_target_unstandardized: dict[InputTarget, pd.DataFrame]
+    ) -> dict[InputTarget, pd.DataFrame]:
         """
         Undersample pions (211) and anti-pions (-211) to match the maximum count of other particle groups.
         """
         rng = Random(self._seed)  # Seed for reproducibility
 
         # Group data by the target column
-        groups = input_target_unstandardized[InputTarget.TARGET].groupby(TARGET_COLUMN, dropna=False)
+        groups = input_target_unstandardized[InputTarget.TARGET].groupby(
+            TARGET_COLUMN, dropna=False
+        )
 
         # Calculate the maximum count of non-pion groups
         non_pion_counts = groups.size().drop([211, -211], errors="ignore")
         max_count = max(non_pion_counts.values.astype(int))
 
         # Print group sizes before undersampling
-        self._log("Sizes of particle groups in training split before undersampling of pions:")
+        self._log(
+            "Sizes of particle groups in training split before undersampling of pions:"
+        )
         self._log(str(groups.size().to_dict()))
 
         # Undersample pions and anti-pions
         sampled_indices = []
         for target, group_indices in groups.groups.items():
             if target in [211, -211]:  # Pions and anti-pions
-                sampled_indices.extend(rng.sample(list(group_indices), min(len(group_indices), max_count)))
+                sampled_indices.extend(
+                    rng.sample(list(group_indices), min(len(group_indices), max_count))
+                )
             else:  # Keep all other particles
                 sampled_indices.extend(group_indices)
 
         # Create a new DataFrame with the sampled indices
-        input_target_unstandardized[InputTarget.INPUT] = input_target_unstandardized[InputTarget.INPUT].loc[sampled_indices]
-        input_target_unstandardized[InputTarget.TARGET] = input_target_unstandardized[InputTarget.TARGET].loc[sampled_indices]
-        input_target_unstandardized[InputTarget.UNSTANDARDIZED] = input_target_unstandardized[InputTarget.UNSTANDARDIZED].loc[sampled_indices]
+        input_target_unstandardized[InputTarget.INPUT] = input_target_unstandardized[
+            InputTarget.INPUT
+        ].loc[sampled_indices]
+        input_target_unstandardized[InputTarget.TARGET] = input_target_unstandardized[
+            InputTarget.TARGET
+        ].loc[sampled_indices]
+        input_target_unstandardized[InputTarget.UNSTANDARDIZED] = (
+            input_target_unstandardized[InputTarget.UNSTANDARDIZED].loc[sampled_indices]
+        )
 
         # Print group sizes after undersampling
-        self._log("Sizes of particle groups in training split after undersampling of pions:")
-        self._log(str(input_target_unstandardized[InputTarget.TARGET].groupby(TARGET_COLUMN, dropna=False).size().to_dict()))
+        self._log(
+            "Sizes of particle groups in training split after undersampling of pions:"
+        )
+        self._log(
+            str(
+                input_target_unstandardized[InputTarget.TARGET]
+                .groupby(TARGET_COLUMN, dropna=False)
+                .size()
+                .to_dict()
+            )
+        )
 
         return input_target_unstandardized
 
@@ -847,7 +998,9 @@ class DataPreparation:
                 ignore_index=True,
             )
 
-        self._log(f"Scaling (standardization) params has been calculated on training split, results:\n{self._scaling_params}")
+        self._log(
+            f"Scaling (standardization) params has been calculated on training split, results:\n{self._scaling_params}"
+        )
 
     def _group_data(self, data):
         """
@@ -864,7 +1017,9 @@ class DataPreparation:
 
         return grouped_data
 
-    def _input_target_unstandardized_split(self, data: pd.DataFrame) -> dict[InputTarget, pd.DataFrame]:
+    def _input_target_unstandardized_split(
+        self, data: pd.DataFrame
+    ) -> dict[InputTarget, pd.DataFrame]:
         """
         Split data into inputs (standardized inputs for ML model), targets (ground truth, if not experimental) and additional
         information with unstandardized input columns and possibly additional data like nSigma columns.
@@ -872,15 +1027,24 @@ class DataPreparation:
         input_data = data.loc[:, COLUMNS_FOR_TRAINING]
         if self._is_extended:
             # Add NSigma columns to unstandardized split, if they are available (extended dataset)
-            unstandardized = data.loc[:, COLUMNS_FOR_TRAINING + NSIGMA_COLUMNS + ["fPt"]]
+            unstandardized = data.loc[
+                :, COLUMNS_FOR_TRAINING + NSIGMA_COLUMNS + ["fPt"]
+            ]
         else:
             unstandardized = data.loc[:, COLUMNS_FOR_TRAINING + ["fPt"]]
 
         if not self._is_experimental:
             targets = data.loc[:, [TARGET_COLUMN]]
-            return {InputTarget.INPUT: input_data, InputTarget.TARGET: targets, InputTarget.UNSTANDARDIZED: unstandardized}
+            return {
+                InputTarget.INPUT: input_data,
+                InputTarget.TARGET: targets,
+                InputTarget.UNSTANDARDIZED: unstandardized,
+            }
 
-        return {InputTarget.INPUT: input_data, InputTarget.UNSTANDARDIZED: unstandardized}
+        return {
+            InputTarget.INPUT: input_data,
+            InputTarget.UNSTANDARDIZED: unstandardized,
+        }
 
     def _standardize_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -897,10 +1061,7 @@ class DataPreparation:
         """
         Check if data is already preprocessed, returns boolean indicating success.
         """
-        if any(
-            key not in self._prepared_data.keys()
-            for key in splits
-        ):
+        if any(key not in self._prepared_data.keys() for key in splits):
             try:
                 self._load_preprocessed_data(splits)
             except FileNotFoundError:
@@ -931,11 +1092,13 @@ class DataPreparation:
             self._is_experimental = metadata["is_experimental"]
             self._is_extended = metadata["is_extended"]
 
-        self._scaling_params = pd.read_json(f"{self.save_dir}/scaling_params.json", orient="split")
+        self._scaling_params = pd.read_json(
+            f"{self.save_dir}/scaling_params.json", orient="split"
+        )
 
-        self._log("Successfuly loaded preprocessed data! No need for from scratch preparation.")
+        self._log(
+            "Successfuly loaded preprocessed data! No need for from scratch preparation."
+        )
 
     def _log(self, message: str):
         print(f"[DataPreparation] {message}")
-
-

@@ -9,14 +9,18 @@ from pdi.data.data_preparation import PreparedData
 from pdi.data.group_id_helpers import group_id_to_binary_array
 from pdi.data.types import GroupID, InputTarget, Split
 
+
 class InsertionStrategy:
     @abstractmethod
     def __call__(self, prepared_data: PreparedData) -> PreparedData:
         pass
 
+
 class MeanInsertion(InsertionStrategy):
     def __call__(self, prepared_data: PreparedData) -> PreparedData:
-        ungrouped_train_data = pd.concat([group[InputTarget.INPUT] for group in prepared_data[Split.TRAIN].values()])
+        ungrouped_train_data = pd.concat(
+            [group[InputTarget.INPUT] for group in prepared_data[Split.TRAIN].values()]
+        )
         means = ungrouped_train_data.mean()
 
         for split_data in prepared_data.values():
@@ -28,6 +32,7 @@ class MeanInsertion(InsertionStrategy):
                 group_data[InputTarget.INPUT].fillna(means, inplace=True)
 
         return prepared_data
+
 
 # If we would like in the future to test more Regression models.
 # This class can be for sure generalize to DRY.
@@ -61,9 +66,13 @@ class LinearRegressionInsertion(InsertionStrategy):
             self._missing_features_masks[gid] = missing_features
             self._regressions[gid] = regression
             self._regression_params[gid] = {
-                "missing_columns": list(group_data[InputTarget.INPUT].columns[missing_features]),
-                "non_missing_columns": list(group_data[InputTarget.INPUT].columns[~missing_features]),
-                "regression_coefficients": regression.coef_.tolist()
+                "missing_columns": list(
+                    group_data[InputTarget.INPUT].columns[missing_features]
+                ),
+                "non_missing_columns": list(
+                    group_data[InputTarget.INPUT].columns[~missing_features]
+                ),
+                "regression_coefficients": regression.coef_.tolist(),
             }
 
         for split_data in prepared_data.values():
@@ -80,14 +89,17 @@ class LinearRegressionInsertion(InsertionStrategy):
                 input_data = group_data[InputTarget.INPUT]
 
                 # Predict missing values
-                pred = self._regressions[gid].predict(input_data.loc[:, ~self._missing_features_masks[gid]])
+                pred = self._regressions[gid].predict(
+                    input_data.loc[:, ~self._missing_features_masks[gid]]
+                )
 
                 # Input predicted values
                 input_data.loc[:, self._missing_features_masks[gid]] = pred
 
         return prepared_data
 
+
 MISSING_DATA_STRATEGIES = {
     "mean": MeanInsertion(),
-    "linear regression": LinearRegressionInsertion()
+    "linear regression": LinearRegressionInsertion(),
 }

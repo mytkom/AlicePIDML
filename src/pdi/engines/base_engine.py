@@ -14,6 +14,7 @@ from pdi.data.constants import COLUMNS_FOR_TRAINING
 from pdi.data.data_preparation import DataPreparation
 from pdi.results_and_metrics import TrainResults, TestResults
 
+
 class BaseEngine:
     """
     BaseEngine is a class, which is a super class of all the engines. Engine is an object, which knows
@@ -24,6 +25,7 @@ class BaseEngine:
     Function build_engine(), which knows what engine is suitable for given config is in __init__.py file
     of this (engines) module.
     """
+
     def __init__(self, cfg: Config, target_code: int, base_dir: str | None) -> None:
         self._target_code = target_code
         self._epoch_num = 0
@@ -36,8 +38,14 @@ class BaseEngine:
             self._base_dir = base_dir
         else:
             run_number = 1
-            project_target_path = os.path.join(cfg.results_dir, cfg.project_dir, TARGET_CODE_TO_PART_NAME[self._target_code])
-            while os.path.exists(os.path.join(project_target_path, f"run_{run_number}")):
+            project_target_path = os.path.join(
+                cfg.results_dir,
+                cfg.project_dir,
+                TARGET_CODE_TO_PART_NAME[self._target_code],
+            )
+            while os.path.exists(
+                os.path.join(project_target_path, f"run_{run_number}")
+            ):
                 run_number += 1
             os.makedirs(os.path.join(project_target_path, f"run_{run_number}"))
             self._base_dir = os.path.join(project_target_path, f"run_{run_number}")
@@ -72,7 +80,10 @@ class BaseEngine:
 
         results = self._test(model_dirpath)
 
-        self._log_results({f"test/{k}": v for k,v in results.test_metrics.to_dict().items()}, csv_name=f"test_metrics.csv")
+        self._log_results(
+            {f"test/{k}": v for k, v in results.test_metrics.to_dict().items()},
+            csv_name=f"test_metrics.csv",
+        )
 
         print("Test results:")
         print(results.test_metrics.to_dict())
@@ -105,33 +116,45 @@ class BaseEngine:
 
         metadata_path = os.path.join(dirpath, f"metadata.json")
         with open(metadata_path, "w") as metadata_file:
-            json.dump({
-                "threshold": str(threshold),
-                "epoch": str(epoch),
-                "best_f1": str(self._best_f1),
-                "model_class": model.__class__.__name__,
-            }, metadata_file, indent=4)
+            json.dump(
+                {
+                    "threshold": str(threshold),
+                    "epoch": str(epoch),
+                    "best_f1": str(self._best_f1),
+                    "model_class": model.__class__.__name__,
+                },
+                metadata_file,
+                indent=4,
+            )
 
         artifact.add_file(metadata_path)
 
         # Export ONNX
         onnx_path = os.path.join(dirpath, "model.onnx")
-        dummy_input = torch.tensor(np.random.rand(1, len(COLUMNS_FOR_TRAINING)), dtype=torch.float32)
+        dummy_input = torch.tensor(
+            np.random.rand(1, len(COLUMNS_FOR_TRAINING)), dtype=torch.float32
+        )
         model_with_sigmoid = nn.Sequential(model, nn.Sigmoid())
-        torch.onnx.export(model_with_sigmoid, dummy_input, onnx_path,
-                          export_params=True,
-                          opset_version=14,
-                          do_constant_folding=True,
-                          input_names=["input"],
-                          output_names=["output"],
-                          dynamic_axes={"input": {0: 'batch size'}})
+        torch.onnx.export(
+            model_with_sigmoid,
+            dummy_input,
+            onnx_path,
+            export_params=True,
+            opset_version=14,
+            do_constant_folding=True,
+            input_names=["input"],
+            output_names=["output"],
+            dynamic_axes={"input": {0: "batch size"}},
+        )
 
         artifact.add_file(onnx_path)
 
         model.to(self._cfg.training.device)
         wandb.log_artifact(artifact)
 
-    def _load_model(self, skeleton_model: nn.Module, dirpath: Optional[str] = None) -> tuple[nn.Module, float]:
+    def _load_model(
+        self, skeleton_model: nn.Module, dirpath: Optional[str] = None
+    ) -> tuple[nn.Module, float]:
         """
         Loads weights for pytorch model from dirpath according to _save_best_model() file naming convention.
         """
@@ -139,15 +162,31 @@ class BaseEngine:
             dirpath = self._base_dir
         dirpath = os.path.join(dirpath, "model_weights")
 
-        skeleton_model.load_state_dict(torch.load(os.path.join(dirpath, "best.pt"), weights_only=True, map_location=self._cfg.training.device))
+        skeleton_model.load_state_dict(
+            torch.load(
+                os.path.join(dirpath, "best.pt"),
+                weights_only=True,
+                map_location=self._cfg.training.device,
+            )
+        )
         with open(os.path.join(dirpath, f"metadata.json"), "r") as metadata_file:
             metadata = json.load(metadata_file)
 
         return skeleton_model, float(metadata["threshold"])
 
     # returns if progress was made
-    def _early_stopping_step(self, model: nn.Module, threshold: float, epoch: int, val_loss: float, min_loss: float, val_f1: float) -> bool:
-        if (1 - val_loss / min_loss) > self._cfg.training.early_stopping_progress_threshold:
+    def _early_stopping_step(
+        self,
+        model: nn.Module,
+        threshold: float,
+        epoch: int,
+        val_loss: float,
+        min_loss: float,
+        val_f1: float,
+    ) -> bool:
+        if (
+            1 - val_loss / min_loss
+        ) > self._cfg.training.early_stopping_progress_threshold:
             self._epochs_since_last_progress = 0
             if self._best_f1 < val_f1:
                 self._best_f1 = val_f1
@@ -161,9 +200,18 @@ class BaseEngine:
         if self._cfg.training.early_stopping_epoch_count == 0:
             return False
 
-        return self._epochs_since_last_progress >= self._cfg.training.early_stopping_epoch_count
+        return (
+            self._epochs_since_last_progress
+            >= self._cfg.training.early_stopping_epoch_count
+        )
 
-    def _log_results(self, metrics: dict, csv_name: str, offline: bool = False, step: int | None = None):
+    def _log_results(
+        self,
+        metrics: dict,
+        csv_name: str,
+        offline: bool = False,
+        step: int | None = None,
+    ):
         """
         Logs metrics and saves them to a CSV file.
 
@@ -187,9 +235,12 @@ class BaseEngine:
 
         file_exists = os.path.exists(csv_path)
         with open(csv_path, mode="a", newline="") as csv_file:
-            writer = csv.DictWriter(csv_file, fieldnames=["step"] + list(metrics.keys()) if step else list(metrics.keys()))
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=(
+                    ["step"] + list(metrics.keys()) if step else list(metrics.keys())
+                ),
+            )
             if not file_exists:
                 writer.writeheader()  # Write header if file doesn't exist
             writer.writerow({"step": step, **metrics} if step else metrics)
-
-

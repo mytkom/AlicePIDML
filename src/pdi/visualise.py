@@ -1,4 +1,4 @@
-""" This module contains the functions used to plot comparison graphs.
+"""This module contains the functions used to plot comparison graphs.
 
 Functions
 ------
@@ -24,14 +24,19 @@ from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.evaluate import get_interval_purity_efficiency
 from pdi.results_and_metrics import TestResults
 
-def plot_precision_recall_comparison(test_metrics: dict[str, TestResults], save_dir=None) -> Figure:
+
+def plot_precision_recall_comparison(
+    test_metrics: dict[str, TestResults], save_dir=None
+) -> Figure:
     fig = plt.figure(figsize=(10, 6))
     target_codes = set()
     precision_recall_results: list[dict] = []
     for model_name, test_result in test_metrics.items():
         binary_targets = test_result.targets == test_result.test_metrics.target_code
         target_codes.add(test_result.test_metrics.target_code)
-        precision, recall, thresholds = precision_recall_curve(binary_targets, test_result.predictions)
+        precision, recall, thresholds = precision_recall_curve(
+            binary_targets, test_result.predictions
+        )
 
         # Add to results
         entry: dict = {}
@@ -63,10 +68,17 @@ def plot_precision_recall_comparison(test_metrics: dict[str, TestResults], save_
 
     return fig
 
-PT_LINSPACE=linspace(0, 5, 20)
-PT_INTERVALS=list(zip(PT_LINSPACE[:-1], PT_LINSPACE[1:]))
 
-def plot_metrics_vs_pt_comparison(test_metrics: dict[str, TestResults], pt: NDArray, pt_intervals=PT_INTERVALS, save_dir: str | None = None) -> Iterator[tuple[Figure, str]]:
+PT_LINSPACE = linspace(0, 5, 20)
+PT_INTERVALS = list(zip(PT_LINSPACE[:-1], PT_LINSPACE[1:]))
+
+
+def plot_metrics_vs_pt_comparison(
+    test_metrics: dict[str, TestResults],
+    pt: NDArray,
+    pt_intervals=PT_INTERVALS,
+    save_dir: str | None = None,
+) -> Iterator[tuple[Figure, str]]:
     """
     Plots purity, efficiency, and F1 score vs pT for multiple models.
 
@@ -105,7 +117,9 @@ def plot_metrics_vs_pt_comparison(test_metrics: dict[str, TestResults], pt: NDAr
     for model_name, test_result in test_metrics.items():
         target_codes.add(test_result.target_code)
         targets = test_result.targets == test_result.test_metrics.target_code
-        selected = (test_result.predictions >= test_result.test_metrics.threshold).astype("int")
+        selected = (
+            test_result.predictions >= test_result.test_metrics.threshold
+        ).astype("int")
 
         purities_pt_plot, efficiencies_pt_plot, confidence_intervals, momenta_avg = (
             get_interval_purity_efficiency(targets, selected, pt, pt_intervals)
@@ -114,7 +128,9 @@ def plot_metrics_vs_pt_comparison(test_metrics: dict[str, TestResults], pt: NDAr
         # Store metrics in the DataFrame
         purities_pt_plot = np.array(purities_pt_plot)
         efficiencies_pt_plot = np.array(efficiencies_pt_plot)
-        f1_scores = (2 * purities_pt_plot * efficiencies_pt_plot) / (purities_pt_plot + efficiencies_pt_plot + np.finfo(float).eps)
+        f1_scores = (2 * purities_pt_plot * efficiencies_pt_plot) / (
+            purities_pt_plot + efficiencies_pt_plot + np.finfo(float).eps
+        )
 
         df[f"Purity {model_name}"] = pd.Series(purities_pt_plot)
         df[f"Efficiency {model_name}"] = pd.Series(efficiencies_pt_plot)
@@ -128,11 +144,18 @@ def plot_metrics_vs_pt_comparison(test_metrics: dict[str, TestResults], pt: NDAr
     def plot(metric_name, y_values, y_label, title_suffix, file_suffix):
         fig = plt.figure(figsize=(10, 6))
         for model_name in test_metrics.keys():
-            plt.plot(df[f"Pt {model_name}"], df[f"{metric_name} {model_name}"], "o-", label=model_name)
+            plt.plot(
+                df[f"Pt {model_name}"],
+                df[f"{metric_name} {model_name}"],
+                "o-",
+                label=model_name,
+            )
         plt.xlabel("p_t (GeV/c)")
         plt.ylabel(y_label)
         plt.ylim([0, 1.1])
-        plt.title(f"{y_label} vs p_t ({TARGET_CODE_TO_PART_NAME[target_code]}) {title_suffix}")
+        plt.title(
+            f"{y_label} vs p_t ({TARGET_CODE_TO_PART_NAME[target_code]}) {title_suffix}"
+        )
         plt.legend(loc="lower left")
         plt.grid()
         plt.close()
@@ -140,11 +163,18 @@ def plot_metrics_vs_pt_comparison(test_metrics: dict[str, TestResults], pt: NDAr
         return fig, f"{file_suffix}-vs-pt.png"
 
     yield plot("Purity", df.filter(like="Purity").values, "Purity", "", "purity")
-    yield plot("Efficiency", df.filter(like="Efficiency").values, "Efficiency", "", "efficiency")
+    yield plot(
+        "Efficiency",
+        df.filter(like="Efficiency").values,
+        "Efficiency",
+        "",
+        "efficiency",
+    )
     yield plot("F1", df.filter(like="F1").values, "F1 Score", "", "f1")
 
     if save_dir:
         df.to_csv(os.path.join(save_dir, "metrics-vs-pt.csv"), index=False)
+
 
 def plot_learning_curve(
     loss: list[float], val_loss: list[float], label: str = None, save_dir: str = None

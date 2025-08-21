@@ -1,4 +1,4 @@
-""" This module contains the models used in the experiments.
+"""This module contains the models used in the experiments.
 
 Classes
 ------
@@ -23,9 +23,8 @@ from pdi.data.constants import N_COLUMNS
 from pdi.data.group_id_helpers import group_id_to_binary_array
 from pdi.data.types import GroupID
 
-ACTIVATIONS = {
-    "ReLU": nn.ReLU
-}
+ACTIVATIONS = {"ReLU": nn.ReLU}
+
 
 def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     if cfg.architecture == "mlp":
@@ -43,7 +42,7 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
         )
     elif cfg.architecture == "attention":
         return AttentionModel(
-            in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
+            in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
             embed_dim=cfg.attention.embed_dim,
             ff_hidden_layers=cfg.attention.mlp_hidden_layers,
@@ -52,11 +51,11 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             num_heads=cfg.attention.num_heads,
             num_blocks=cfg.attention.num_blocks,
             activation=ACTIVATIONS[cfg.attention.activation],
-            dropout=cfg.attention.dropout
+            dropout=cfg.attention.dropout,
         )
     elif cfg.architecture == "attention_dann":
         return AttentionModelDANN(
-            in_dim=N_COLUMNS + 1, # +1 for value in one hot encoding
+            in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
             embed_dim=cfg.attention.embed_dim,
             ff_hidden_layers=cfg.attention.mlp_hidden_layers,
@@ -72,11 +71,15 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     else:
         raise KeyError(f"Architecture {cfg.architecture} does not exist!")
 
+
 class NeuralNet(nn.Module):
     """NeuralNet is a basic neural network with variable layer dimensions, activation function and optional dropout."""
 
     def __init__(
-        self, layers: list[int], activation: type[nn.Module], dropout: Optional[float] = None
+        self,
+        layers: list[int],
+        activation: type[nn.Module],
+        dropout: Optional[float] = None,
     ):
         """__init__
 
@@ -152,7 +155,9 @@ class AttentionModel(nn.Module):
     """AttentionModel is an attention-based model used for processing incomplete examples."""
 
     class _AttentionPooling(nn.Module):
-        def __init__(self, in_dim: int, pool_dim: List[int], activation: type[nn.Module]):
+        def __init__(
+            self, in_dim: int, pool_dim: List[int], activation: type[nn.Module]
+        ):
             super().__init__()
             self.net = NeuralNet([in_dim, *pool_dim, in_dim], activation)
             self.softmax = nn.Softmax(dim=1)
@@ -181,7 +186,7 @@ class AttentionModel(nn.Module):
                 feat_count = not_missing[0].nonzero().shape[0]
                 rows, _ = x.shape
 
-            oh = one_hot(not_missing_idx, N_COLUMNS) # pylint: disable=not-callable
+            oh = one_hot(not_missing_idx, N_COLUMNS)  # pylint: disable=not-callable
             one_hot_indices = oh.reshape(rows, feat_count, N_COLUMNS)
 
             values = values.reshape(rows, feat_count, 1)
@@ -219,12 +224,19 @@ class AttentionModel(nn.Module):
         self.emb = NeuralNet([in_dim, *embed_hidden_layers, embed_dim], activation)
         self.drop = nn.Dropout(dropout)
         encoder_layer = nn.TransformerEncoderLayer(
-            embed_dim, num_heads, encoder_ff_hidden, dropout, activation(), batch_first=True
+            embed_dim,
+            num_heads,
+            encoder_ff_hidden,
+            dropout,
+            activation(),
+            batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(
             encoder_layer, num_blocks, enable_nested_tensor=False
         )
-        self.pool = AttentionModel._AttentionPooling(embed_dim, pool_hidden_layers, activation)
+        self.pool = AttentionModel._AttentionPooling(
+            embed_dim, pool_hidden_layers, activation
+        )
         self.net = NeuralNet([embed_dim, *ff_hidden_layers, 1], activation)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -239,6 +251,7 @@ class AttentionModel(nn.Module):
     def predict(self, incomplete_tensor: Tensor) -> Tensor:
         return self.forward(incomplete_tensor)
 
+
 # DANN
 class ReverseLayerF(Function):
     @staticmethod
@@ -252,6 +265,7 @@ class ReverseLayerF(Function):
         output = grad_output.neg() * ctx.alpha
 
         return output, None
+
 
 class AttentionModelDANN(AttentionModel):
     """AttentionModelDANN is an attention-based model with Domain Adversarial Neural Network (DANN) capabilities."""
@@ -272,9 +286,20 @@ class AttentionModelDANN(AttentionModel):
         alpha: float = 1.0,
     ):
         super().__init__(
-            in_dim, embed_hidden_layers, embed_dim, encoder_ff_hidden, ff_hidden_layers, pool_hidden_layers, num_heads, num_blocks, activation, dropout
+            in_dim,
+            embed_hidden_layers,
+            embed_dim,
+            encoder_ff_hidden,
+            ff_hidden_layers,
+            pool_hidden_layers,
+            num_heads,
+            num_blocks,
+            activation,
+            dropout,
         )
-        self.domain_classifier = NeuralNet([embed_dim, *dom_hidden_layers, 1], activation)
+        self.domain_classifier = NeuralNet(
+            [embed_dim, *dom_hidden_layers, 1], activation
+        )
         self.alpha = alpha
 
     def forward(self, x: Tensor) -> Tensor:

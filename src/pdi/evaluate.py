@@ -1,4 +1,4 @@
-""" This module contains the functions used to evaluate trained models.
+"""This module contains the functions used to evaluate trained models.
 
 Functions
 ------
@@ -24,7 +24,8 @@ from tqdm import tqdm
 
 from pdi.data.constants import PART_DICT
 
-P_CUT=0.5
+P_CUT = 0.5
+
 
 def get_nsigma_predictions_data(
     dataloader: DataLoader[tuple[Tensor, Tensor, Dict[str, Tensor]]],
@@ -72,7 +73,13 @@ def get_nsigma_predictions_data(
     targets_arr = np.array(targets, dtype=np.float32).squeeze()
     dict_arr = {k: np.array(v).squeeze() for k, v in additional_data.items()}
 
-    return predictions_arr, targets_arr, dict_arr, np.array(input_data_tensors).squeeze()
+    return (
+        predictions_arr,
+        targets_arr,
+        dict_arr,
+        np.array(input_data_tensors).squeeze(),
+    )
+
 
 def maximize_f1(
     binary_targets: NDArray[np.float32], predictions: NDArray[np.float32]

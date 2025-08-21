@@ -7,45 +7,65 @@ from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
 from pdi.config import Config
-from pdi.data.data_preparation import CombinedDataLoader, MCBatchItem, DataPreparation, MCBatchItemOut
+from pdi.data.data_preparation import (
+    CombinedDataLoader,
+    MCBatchItem,
+    DataPreparation,
+    MCBatchItemOut,
+)
 from pdi.data.types import GroupID, Split
 from pdi.engines.base_engine import BaseEngine
-from pdi.results_and_metrics import TestResults, TrainResults, ValidationMetrics, TestMetrics
+from pdi.results_and_metrics import (
+    TestResults,
+    TrainResults,
+    ValidationMetrics,
+    TestMetrics,
+)
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
 from pdi.losses import build_loss
 from pdi.models import build_model
 from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
+
 class ClassicEngine(BaseEngine):
     """
     Classic engine is suitable for pytorch nn.Modules with standard training flow.
     """
-    def __init__(self, cfg: Config, target_code: int, base_dir: str | None = None) -> None:
+
+    def __init__(
+        self, cfg: Config, target_code: int, base_dir: str | None = None
+    ) -> None:
         super().__init__(cfg, target_code, base_dir)
         self._data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
 
         if self._cfg.model.architecture == "mlp":
             # Deal with missing data inplace on PreparedData object
-            self._data_prep.transform_prepared_data(MISSING_DATA_STRATEGIES[cfg.model.mlp.missing_data_strategy])
+            self._data_prep.transform_prepared_data(
+                MISSING_DATA_STRATEGIES[cfg.model.mlp.missing_data_strategy]
+            )
 
-        (self._train_dl, self._val_dl, self._test_dl) = self._data_prep.create_dataloaders(
-            batch_size={
+        (self._train_dl, self._val_dl, self._test_dl) = (
+            self._data_prep.create_dataloaders(
+                batch_size={
                     Split.TRAIN: self._cfg.training.batch_size,
                     Split.VAL: self._cfg.validation.batch_size,
                     Split.TEST: self._cfg.validation.batch_size,
-            },
-            num_workers={
+                },
+                num_workers={
                     Split.TRAIN: self._cfg.training.num_workers,
                     Split.VAL: self._cfg.validation.num_workers,
                     Split.TEST: self._cfg.validation.num_workers,
-            },
-            undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
-            undersample_pions=self._cfg.training.undersample_pions,
+                },
+                undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
+                undersample_pions=self._cfg.training.undersample_pions,
+            )
         )
 
         if self._data_prep._is_experimental:
-            raise RuntimeError("ClassicEngine got experimental data, it is not suited to handle it!")
+            raise RuntimeError(
+                "ClassicEngine got experimental data, it is not suited to handle it!"
+            )
 
         self._data_prep.save_dataset_metadata(self._base_dir)
 
@@ -61,7 +81,9 @@ class ClassicEngine(BaseEngine):
         pos_weight = None
         # TODO: check if it works as expected, compare results with it and without
         if self._cfg.training.weight_particles_species:
-            pos_weight = torch.tensor(self._data_prep.pos_weight(self._target_code)).to(self._cfg.training.device)
+            pos_weight = torch.tensor(self._data_prep.pos_weight(self._target_code)).to(
+                self._cfg.training.device
+            )
         loss: _Loss = build_loss(self._cfg.training, pos_weight=pos_weight)
 
         optimizer = build_optimizer(self._cfg.training, model)
@@ -78,7 +100,9 @@ class ClassicEngine(BaseEngine):
                 epoch=epoch,
                 optimizer=optimizer,
                 loss_func=loss,
-                dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._train_dl),
+                dataloader=cast(
+                    CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._train_dl
+                ),
             )
 
             # New learning rate for the next
@@ -91,12 +115,16 @@ class ClassicEngine(BaseEngine):
                 val_metrics = self._evaluate(
                     model=model,
                     loss_func=loss,
-                    dataloader=cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._val_dl),
+                    dataloader=cast(
+                        CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._val_dl
+                    ),
                 )
 
                 # Threshold for posterior probability to identify as positive
                 # it is optimized for f1 metric
-                model.thres = torch.tensor(np.array(val_metrics.threshold)).to(self._cfg.training.device)
+                model.thres = torch.tensor(np.array(val_metrics.threshold)).to(
+                    self._cfg.training.device
+                )
 
                 val_loss = val_metrics.loss
                 val_loss_arr.append(val_loss)
@@ -109,18 +137,18 @@ class ClassicEngine(BaseEngine):
                     val_f1=val_metrics.f1,
                     epoch=epoch,
                 )
-                if  val_loss < min_loss:
+                if val_loss < min_loss:
                     min_loss = val_loss
 
                 # Log validation metrics
                 self._log_results(
-                    metrics = {
+                    metrics={
                         "epoch": epoch,
                         "scheduled_lr": scheduler.get_last_lr()[0],
                         "val/f1_best": self._best_f1,
-                        **{f"val/{k}": v for k,v in val_metrics.to_dict().items()},
+                        **{f"val/{k}": v for k, v in val_metrics.to_dict().items()},
                     },
-                    csv_name = f"validation_metrics.csv"
+                    csv_name=f"validation_metrics.csv",
                 )
                 print(
                     f"Epoch: {epoch}, F1: {val_metrics.f1:.4f}, Loss: {train_loss:.4f}, Val_Loss:{val_loss:.4f}"
@@ -130,10 +158,16 @@ class ClassicEngine(BaseEngine):
                     print(f"Finishing training early at epoch: {epoch}")
                     break
 
-
         return TrainResults(val_losses=val_loss_arr, train_losses=loss_arr)
 
-    def _train_one_epoch(self, model: torch.nn.Module, epoch: int, optimizer: Optimizer, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> float:
+    def _train_one_epoch(
+        self,
+        model: torch.nn.Module,
+        epoch: int,
+        optimizer: Optimizer,
+        loss_func: _Loss,
+        dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut],
+    ) -> float:
         model.train()
         group_losses: dict[GroupID, NDArray] = {}
         loss_run_sum = 0
@@ -147,9 +181,17 @@ class ClassicEngine(BaseEngine):
             gid: GroupID = cast(GroupID, int(gids[0]))
 
             input_data = input_data.to(self._cfg.training.device)
-            binary_targets = (targets == self._target_code).type(torch.float).to(self._cfg.training.device)
+            binary_targets = (
+                (targets == self._target_code)
+                .type(torch.float)
+                .to(self._cfg.training.device)
+            )
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
+            with torch.autocast(
+                device_type=self._cfg.training.device,
+                dtype=torch.float16,
+                enabled=self._cfg.mixed_precision,
+            ):
                 out = model(input_data)
                 loss = loss_func(out, binary_targets)
 
@@ -164,8 +206,8 @@ class ClassicEngine(BaseEngine):
 
             # TODO: decide if it is useful or not; should I log_every tens of steps too?
             self._log_results(
-                metrics={ "loss": loss.item() },
-                step=loader_len*epoch + i,
+                metrics={"loss": loss.item()},
+                step=loader_len * epoch + i,
                 csv_name=f"gid_{gid}_training_loss.csv",
                 offline=True,
             )
@@ -175,9 +217,9 @@ class ClassicEngine(BaseEngine):
 
             if i % self._cfg.training.steps_to_log == 0:
                 self._log_results(
-                    metrics={ "loss": loss_run_sum },
-                    step=loader_len*epoch + i,
-                    csv_name="training_loss.csv"
+                    metrics={"loss": loss_run_sum},
+                    step=loader_len * epoch + i,
+                    csv_name="training_loss.csv",
                 )
                 loss_run_sum = 0
 
@@ -187,7 +229,7 @@ class ClassicEngine(BaseEngine):
                 continue
 
             self._log_results(
-                metrics = {
+                metrics={
                     "gid": gid,
                     "mean_loss_epoch": gid_losses.mean(),
                     "gid_count": len(gid_losses),
@@ -198,7 +240,12 @@ class ClassicEngine(BaseEngine):
 
         return final_loss / count
 
-    def _evaluate(self, model: torch.nn.Module, loss_func: _Loss, dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut]) -> ValidationMetrics:
+    def _evaluate(
+        self,
+        model: torch.nn.Module,
+        loss_func: _Loss,
+        dataloader: CombinedDataLoader[MCBatchItem, MCBatchItemOut],
+    ) -> ValidationMetrics:
         binary_targets = []
         predictions = []
         val_loss = 0.0
@@ -207,9 +254,17 @@ class ClassicEngine(BaseEngine):
         model.eval()
         for _, (input_data, target, _, _) in enumerate(tqdm(dataloader)):
             input_data = input_data.to(self._cfg.training.device)
-            binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
+            binary_target = (
+                (target == self._target_code)
+                .type(torch.float)
+                .to(self._cfg.training.device)
+            )
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
+            with torch.autocast(
+                device_type=self._cfg.training.device,
+                dtype=torch.float16,
+                enabled=self._cfg.mixed_precision,
+            ):
                 out = model(input_data)
                 loss = loss_func(out, binary_target)
 
@@ -234,11 +289,15 @@ class ClassicEngine(BaseEngine):
         binary_targets = np.array(binary_targets).squeeze()
         predictions = np.array(predictions).squeeze()
 
-        return ValidationMetrics(targets=binary_targets, predictions=predictions, loss=val_loss)
+        return ValidationMetrics(
+            targets=binary_targets, predictions=predictions, loss=val_loss
+        )
 
     def _test(self, model_dirpath: Optional[str] = None) -> TestResults:
         loss_func: _Loss = build_loss(self._cfg.training)
-        model: torch.nn.Module = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
+        model: torch.nn.Module = build_model(
+            self._cfg.model, group_ids=self._data_prep.get_group_ids()
+        )
         model, threshold = self._load_model(model, model_dirpath)
         model.to(self._cfg.training.device)
         predictions = []
@@ -247,11 +306,21 @@ class ClassicEngine(BaseEngine):
         count = 0
 
         model.eval()
-        for _, (input_data, target, _, _) in enumerate(tqdm(cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl))):
+        for _, (input_data, target, _, _) in enumerate(
+            tqdm(cast(CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._test_dl))
+        ):
             input_data = input_data.to(self._cfg.training.device)
-            binary_target = (target == self._target_code).type(torch.float).to(self._cfg.training.device)
+            binary_target = (
+                (target == self._target_code)
+                .type(torch.float)
+                .to(self._cfg.training.device)
+            )
 
-            with torch.autocast(device_type=self._cfg.training.device, dtype=torch.float16, enabled=self._cfg.mixed_precision):
+            with torch.autocast(
+                device_type=self._cfg.training.device,
+                dtype=torch.float16,
+                enabled=self._cfg.mixed_precision,
+            ):
                 out = model(input_data)
                 loss = loss_func(out, binary_target)
 
