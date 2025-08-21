@@ -85,8 +85,8 @@ class MCDataset(Dataset[MCBatchItem]):
     def to_df(self) -> pd.DataFrame:
         # Convert data to dictionary format
         batch_dict = {
-            "targets": self._target.numpy().squeeze(),
-            "gids": self._group_id,
+            TARGET_COLUMN: self._target.numpy().squeeze(),
+            "GroupID": self._group_id,
         }
 
         # Add unstandardized data to the batch dictionary
@@ -134,7 +134,7 @@ class ExpDataset(Dataset[ExpBatchItem]):
     def to_df(self) -> pd.DataFrame:
         # Convert data to dictionary format
         batch_dict = {
-            "gids": self._group_id,
+            "GroupID": self._group_id,
         }
 
         # Add unstandardized data to the batch dictionary

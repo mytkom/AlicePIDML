@@ -32,10 +32,10 @@ class TestMetrics:
     """
     def __init__(self, targets: NDArray, predictions: NDArray, threshold: float, target_code: int, loss: Optional[float] = None):
         binary_targets = targets == target_code
-        binary_predictions = predictions >= threshold
-        self.f1 = f1_score(binary_targets, binary_predictions, average="binary")
-        self.precision = precision_score(binary_targets, binary_predictions, average="binary")
-        self.recall = recall_score(binary_targets, binary_predictions, average="binary")
+        self.binary_predictions = predictions >= threshold
+        self.f1 = f1_score(binary_targets, self.binary_predictions, average="binary")
+        self.precision = precision_score(binary_targets, self.binary_predictions, average="binary")
+        self.recall = recall_score(binary_targets, self.binary_predictions, average="binary")
         self.loss = loss
         self.threshold = threshold
         self.target_code = target_code
