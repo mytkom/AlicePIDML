@@ -20,13 +20,12 @@
                 },
                 "embed_hidden_layers": {
                   "values": [
-                    [64,32,16],
+                    [128],
                     [128,256,256,128,64]
                   ]
                 },
                 "embed_dim": {
                   "values": [
-                    32,
                     64
                   ]
                 },
@@ -39,25 +38,22 @@
                 "encoder_ff_hidden": {
                   "values": [
                     128,
-                    256
                   ]
                 },
                 "pool_hidden_layers": {
                   "values": [
-                    [64,32,16],
+                    [64],
                     [128,256,256,128,64]
                   ]
                 },
                 "num_heads": {
                   "values": [
                     2,
-                    4
                   ]
                 },
                 "num_blocks": {
                   "values": [
                     2,
-                    4
                   ]
                 }
               }
@@ -67,7 +63,7 @@
         "training": {
           "parameters": {
             "undersample_missing_detectors": {
-              "values": [true, false]
+              "values": [true]
             },
             "start_lr": {
               "values": [
@@ -77,7 +73,7 @@
               ]
             },
             "lr_scheduler": {
-              "values": [null, "exponential", "polynomial", "cosine_restarts"]
+              "values": [null]
             }
           }
         }

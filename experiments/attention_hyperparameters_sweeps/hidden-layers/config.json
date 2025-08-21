@@ -89,13 +89,13 @@
         "pretrained_model_dirpath": null
     },
     "sweep": {
-        "config": "experiments/attention_hyperparameters_sweep/sweep_config.json",
-        "name": "Attention wide hyperparameter tuning",
+        "config": "experiments/attention_hyperparameters_sweeps/hidden-layers/sweep_config.json",
+        "name": "Attention hidden layers hyperparameter tuning",
         "project_name": "Hyperparameter tuning"
     },
     "validation": {
-        "batch_size": 2048,
-        "num_workers": 2,
+        "batch_size": 8192,
+        "num_workers": 16,
         "validate_every": 5
     },
     "training": {
@@ -131,18 +131,18 @@
        "lr_scheduler": "exponential",
        "loss": "cross entropy",
        "start_lr": 0.003,
-       "device": "cpu",
+       "device": "cuda",
        "steps_to_log": 50,
-       "batch_size": 512,
-       "max_epochs": 2,
-       "early_stopping_epoch_count": 2,
+       "batch_size": 8192,
+       "max_epochs": 50,
+       "early_stopping_epoch_count": 5,
        "early_stopping_progress_threshold": 0.001,
-       "num_workers": 2,
+       "num_workers": 8,
        "weight_particles_species": false
     },
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC24b1-527108-AODS-1-8-with-nsigma.root"],
     "exp_dataset_paths": [],
-    "project_dir": "attention_hyperparameter_tuning",
+    "project_dir": "attention_hyperparameter_tuning/hidden-layers",
     "results_dir": "results",
     "mixed_precision": false,
     "seed": 0,
