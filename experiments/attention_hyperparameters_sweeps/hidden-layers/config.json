@@ -38,7 +38,7 @@
                 32,
                 16
             ],
-            "embed_dim": 32,
+            "embed_dim": 64,
             "encoder_ff_hidden": 128,
             "mlp_hidden_layers": [
                 64,
@@ -128,7 +128,7 @@
                "total_iters": 50
            }
        },
-       "lr_scheduler": "exponential",
+       "lr_scheduler": null,
        "loss": "cross entropy",
        "start_lr": 0.003,
        "device": "cuda",

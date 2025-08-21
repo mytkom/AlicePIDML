@@ -24,36 +24,16 @@
                     [128,256,256,128,64]
                   ]
                 },
-                "embed_dim": {
-                  "values": [
-                    64
-                  ]
-                },
                 "mlp_hidden_layers": {
                   "values": [
                     [64,32,16],
                     [128,256,256,128,64]
                   ]
                 },
-                "encoder_ff_hidden": {
-                  "values": [
-                    128
-                  ]
-                },
                 "pool_hidden_layers": {
                   "values": [
                     [64],
                     [128,256,256,128,64]
-                  ]
-                },
-                "num_heads": {
-                  "values": [
-                    2
-                  ]
-                },
-                "num_blocks": {
-                  "values": [
-                    2
                   ]
                 }
               }
@@ -62,18 +42,12 @@
         },
         "training": {
           "parameters": {
-            "undersample_missing_detectors": {
-              "values": [true]
-            },
             "start_lr": {
               "values": [
                 0.001,
                 0.0003,
                 0.0001
               ]
-            },
-            "lr_scheduler": {
-              "values": [null]
             }
           }
         }
