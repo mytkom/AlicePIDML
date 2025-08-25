@@ -45,6 +45,7 @@ if __name__ == "__main__":
         sweep_configuration["name"] = f"{config.sweep.name}: {cli_config.particle}"
 
     target_code = PART_NAME_TO_TARGET_CODE[cli_config.particle]
+    sweep_metadata[target_code] = []
 
     sweep_id = wandb.sweep(
         sweep=sweep_configuration,

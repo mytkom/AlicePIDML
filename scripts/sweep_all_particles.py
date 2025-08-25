@@ -3,7 +3,7 @@ import tyro
 import wandb
 import hashlib
 from utils import dump_default_config, engine_single_run, load_config
-from pdi.constants import PART_NAME_TO_TARGET_CODE
+from pdi.constants import PART_NAME_TO_TARGET_CODE, TARGET_CODES
 from pathlib import Path
 from pdi.config import AllParticlesConfig
 
@@ -32,6 +32,9 @@ if __name__ == "__main__":
     sweep_metadata: dict[int, list[dict]] = {}
 
     for part_name, target_code in PART_NAME_TO_TARGET_CODE.items():
+        if target_code not in TARGET_CODES:
+            continue
+
         sweep_metadata[target_code] = []
 
         if cli_config.__getattribute__(part_name):

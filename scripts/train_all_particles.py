@@ -2,7 +2,7 @@ import tyro
 import json
 import hashlib
 from utils import dump_default_config, engine_single_run, load_config
-from pdi.constants import PART_NAME_TO_TARGET_CODE
+from pdi.constants import PART_NAME_TO_TARGET_CODE, TARGET_CODES
 from pathlib import Path
 from pdi.config import AllParticlesConfig
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
         output_dir = Path("training_runs")
         output_dir.mkdir(exist_ok=True)
         cli_config.output_file = str(output_dir / f"train_{checksum}.json")
-        
+
     output_file_path = str(Path(cli_config.output_file).resolve())
 
     if cli_config.all:
@@ -32,6 +32,9 @@ if __name__ == "__main__":
     run_metadata: dict[int, dict] = {}
 
     for part_name, target_code in PART_NAME_TO_TARGET_CODE.items():
+        if target_code not in TARGET_CODES:
+            continue
+
         if cli_config.__getattribute__(part_name):
             cli_config.__setattr__(part_name, str(Path(cli_config.__getattribute__(part_name)).resolve()))
             config = load_config(cli_config.__getattribute__(part_name))
