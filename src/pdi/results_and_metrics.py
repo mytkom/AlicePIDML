@@ -40,12 +40,16 @@ class TestMetrics:
         self,
         targets: NDArray,
         predictions: NDArray,
-        threshold: float,
         target_code: int,
+        threshold: float | None = None,
         loss: Optional[float] = None,
     ):
         binary_targets = targets == target_code
-        self.binary_predictions = predictions >= threshold
+        if threshold is not None:
+            self.binary_predictions = predictions >= threshold
+        else:
+            self.binary_predictions = predictions
+
         self.f1 = f1_score(binary_targets, self.binary_predictions, average="binary")
         self.precision = precision_score(
             binary_targets, self.binary_predictions, average="binary"
@@ -71,25 +75,6 @@ class TestMetrics:
         }
 
 
-class TrainResults:
-    """
-    Represents training results, including validation metrics and loss data.
-    """
-
-    def __init__(self, train_losses: List[float], val_losses: List[float]):
-        self.train_losses = train_losses
-        self.val_losses = val_losses
-
-    def to_dict(self) -> dict:
-        """
-        Converts the training results to a dictionary for logging or serialization.
-        """
-        return {
-            "train_losses": self.train_losses,
-            "val_losses": self.val_losses,
-        }
-
-
 class TestResults:
     """
     Represents test results, including test metrics and data used for evaluation.
@@ -99,15 +84,15 @@ class TestResults:
         self,
         targets: NDArray,
         predictions: NDArray,
-        threshold: float,
         target_code: int,
+        threshold: float | None = None,
         loss: float | None = None,
     ):
         self.predictions = predictions
         self.targets = targets
         self.target_code = target_code
         self.test_metrics = TestMetrics(
-            targets, predictions, threshold, target_code, loss
+            targets, predictions, target_code, threshold, loss
         )
 
     @classmethod

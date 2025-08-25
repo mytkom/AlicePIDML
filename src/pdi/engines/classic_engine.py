@@ -13,10 +13,9 @@ from pdi.data.data_preparation import (
     MCBatchItemOut,
 )
 from pdi.data.types import GroupID, Split
-from pdi.engines.base_engine import BaseEngine
+from pdi.engines.base_engine import TorchBaseEngine
 from pdi.results_and_metrics import (
     TestResults,
-    TrainResults,
     ValidationMetrics,
 )
 from pdi.insertion_strategies import MISSING_DATA_STRATEGIES
@@ -26,7 +25,7 @@ from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
 
-class ClassicEngine(BaseEngine):
+class ClassicEngine(TorchBaseEngine):
     """
     Classic engine is suitable for pytorch nn.Modules with standard training flow.
     """
@@ -70,7 +69,7 @@ class ClassicEngine(BaseEngine):
     def get_data_prep(self) -> DataPreparation:
         return self._data_prep
 
-    def train(self) -> TrainResults:
+    def train(self):
         model = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())
         if self._cfg.model.pretrained_model_dirpath:
             self._load_model(model, self._cfg.model.pretrained_model_dirpath)
@@ -155,8 +154,6 @@ class ClassicEngine(BaseEngine):
                 if self._should_early_stop():
                     print(f"Finishing training early at epoch: {epoch}")
                     break
-
-        return TrainResults(val_losses=val_loss_arr, train_losses=loss_arr)
 
     def _train_one_epoch(
         self,

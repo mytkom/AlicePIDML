@@ -12,7 +12,7 @@ from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.config import Config
 from pdi.data.constants import COLUMNS_FOR_TRAINING
 from pdi.data.data_preparation import DataPreparation
-from pdi.results_and_metrics import TrainResults, TestResults
+from pdi.results_and_metrics import TestResults
 
 
 class BaseEngine:
@@ -62,7 +62,7 @@ class BaseEngine:
         pass
 
     @abstractmethod
-    def train(self) -> TrainResults:
+    def train(self):
         pass
 
     @abstractmethod
@@ -95,6 +95,48 @@ class BaseEngine:
 
         return results
 
+    def _log_results(
+        self,
+        metrics: dict,
+        csv_name: str,
+        offline: bool = False,
+        step: int | None = None,
+    ):
+        """
+        Logs metrics and saves them to a CSV file.
+
+        Args:
+            metrics (dict): Dictionary of metrics to log.
+            step (int): Current validation step.
+            csv_path (str): Path to the CSV file for saving metrics.
+        """
+
+        if wandb.run is not None and not offline:
+            # Log metrics using the accelerator
+            if step is not None:
+                wandb.log(metrics, step=step)
+            else:
+                wandb.log(metrics)
+
+        # Save metrics to CSV
+        dir_path = os.path.join(self._base_dir)
+        os.makedirs(dir_path, exist_ok=True)
+        csv_path = os.path.join(dir_path, csv_name)
+
+        file_exists = os.path.exists(csv_path)
+        with open(csv_path, encoding="utf-8", mode="a", newline="") as csv_file:
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=(
+                    ["step"] + list(metrics.keys()) if step else list(metrics.keys())
+                ),
+            )
+            if not file_exists:
+                writer.writeheader()  # Write header if file doesn't exist
+            writer.writerow({"step": step, **metrics} if step else metrics)
+
+
+class TorchBaseEngine(BaseEngine):
     def _save_best_model(self, model: nn.Module, epoch: int, threshold: float):
         """
         Helper function suitable to save best model of pytorch training engine.
@@ -209,42 +251,3 @@ class BaseEngine:
             >= self._cfg.training.early_stopping_epoch_count
         )
 
-    def _log_results(
-        self,
-        metrics: dict,
-        csv_name: str,
-        offline: bool = False,
-        step: int | None = None,
-    ):
-        """
-        Logs metrics and saves them to a CSV file.
-
-        Args:
-            metrics (dict): Dictionary of metrics to log.
-            step (int): Current validation step.
-            csv_path (str): Path to the CSV file for saving metrics.
-        """
-
-        if wandb.run is not None and not offline:
-            # Log metrics using the accelerator
-            if step is not None:
-                wandb.log(metrics, step=step)
-            else:
-                wandb.log(metrics)
-
-        # Save metrics to CSV
-        dir_path = os.path.join(self._base_dir)
-        os.makedirs(dir_path, exist_ok=True)
-        csv_path = os.path.join(dir_path, csv_name)
-
-        file_exists = os.path.exists(csv_path)
-        with open(csv_path, encoding="utf-8", mode="a", newline="") as csv_file:
-            writer = csv.DictWriter(
-                csv_file,
-                fieldnames=(
-                    ["step"] + list(metrics.keys()) if step else list(metrics.keys())
-                ),
-            )
-            if not file_exists:
-                writer.writeheader()  # Write header if file doesn't exist
-            writer.writerow({"step": step, **metrics} if step else metrics)

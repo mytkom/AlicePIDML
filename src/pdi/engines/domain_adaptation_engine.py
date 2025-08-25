@@ -17,10 +17,9 @@ from pdi.data.data_preparation import (
     MCBatchItemOut,
 )
 from pdi.data.types import GroupID, Split
-from pdi.engines.base_engine import BaseEngine
+from pdi.engines.base_engine import TorchBaseEngine
 from pdi.results_and_metrics import (
     TestResults,
-    TrainResults,
     ValidationMetrics,
 )
 from pdi.losses import build_loss
@@ -29,7 +28,7 @@ from pdi.optimizers import build_optimizer
 from pdi.lr_schedulers import build_lr_scheduler
 
 
-class DomainAdaptationEngine(BaseEngine):
+class DomainAdaptationEngine(TorchBaseEngine):
     """
     Engine suitable for DANN (Domain Adversarial Neural Network) training. It handles both
     simulated data and experimental data.
@@ -93,7 +92,7 @@ class DomainAdaptationEngine(BaseEngine):
     def get_data_prep(self) -> DataPreparation:
         return self._sim_data_prep
 
-    def train(self) -> TrainResults:
+    def train(self):
         model = build_model(
             self._cfg.model, group_ids=self._sim_data_prep.get_group_ids()
         )
@@ -199,8 +198,6 @@ class DomainAdaptationEngine(BaseEngine):
                     break
 
         self._model = model
-
-        return TrainResults(train_losses=loss_arr, val_losses=val_loss_arr)
 
     def _train_one_epoch(
         self,
