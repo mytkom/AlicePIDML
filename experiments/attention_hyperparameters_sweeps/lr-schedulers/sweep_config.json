@@ -1,0 +1,23 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "seed": {
+      "values": [0, 2, 4, 8, 32]
+    },
+    "sweep": {
+      "parameters": {
+        "training": {
+          "parameters": {
+            "lr_scheduler": {
+              "values": [null, "cosine_restarts", "polynomial", "exponential"]
+            }
+          }
+        }
+      }
+    }
+  }
+}

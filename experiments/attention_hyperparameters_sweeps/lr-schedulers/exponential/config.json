@@ -1,0 +1,138 @@
+{
+    "data": {
+        "outlier_filtering_methods": {
+            "ocsvm": {},
+            "isolation_forest": {},
+            "iqr": {}
+        },
+        "outlier_filtering_method": null,
+        "train_size": 0.64,
+        "test_size": 0.2,
+        "is_run_3": true
+    },
+    "model": {
+        "architecture": "attention",
+        "mlp": {
+            "hidden_layers": [
+                64,
+                32,
+                16
+            ],
+            "missing_data_strategy": "mean",
+            "activation": "ReLU",
+            "dropout": 0.9
+        },
+        "ensemble": {
+            "group_ids": [],
+            "hidden_layers": [
+                64,
+                32,
+                16
+            ],
+            "activation": "ReLU",
+            "dropout": 0.9
+        },
+        "attention": {
+            "embed_hidden_layers": [64],
+            "embed_dim": 32,
+            "encoder_ff_hidden": 128,
+            "mlp_hidden_layers": [128,256,256,128,64],
+            "pool_hidden_layers": [128,256,256,128,64],
+            "num_heads": 2,
+            "num_blocks": 2,
+            "activation": "ReLU",
+            "dropout": 0.2
+        },
+        "attention_dann": {
+            "dom_hidden_layers": [
+                64,
+                32,
+                16
+            ],
+            "attention": {
+                "embed_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
+                "embed_dim": 32,
+                "encoder_ff_hidden": 128,
+                "mlp_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
+                "pool_hidden_layers": [
+                    64,
+                    32,
+                    16
+                ],
+                "num_heads": 2,
+                "num_blocks": 2,
+                "activation": "ReLU",
+                "dropout": 0.4
+            },
+            "alpha": 2.0
+        },
+        "pretrained_model_dirpath": null
+    },
+    "sweep": {
+        "config": "experiments/attention_hyperparameters_sweeps/lr-schedulers/exponential/sweep_config.json",
+        "name": "Attention exponential hyperparameter tuning",
+        "project_name": "Hyperparameter tuning"
+    },
+    "validation": {
+        "batch_size": 8192,
+        "num_workers": 16,
+        "validate_every": 3
+    },
+    "training": {
+        "optimizers": {
+            "adamw": {
+                "weight_decay": 0.0
+            },
+            "sgd": {
+                "momentum": 0.9,
+                "weight_decay": 0.0,
+                "nesterov": true
+            }
+        },
+       "undersample_missing_detectors": true,
+       "undersample_pions": false,
+       "optimizer": "adamw",
+       "lr_schedulers": {
+           "exponential": {
+               "gamma": 0.9
+           },
+           "cosine_restarts": {
+               "first_cycle_epochs": 20,
+               "cycle_epoch_inc": 5
+           },
+           "polynomial": {
+               "power": 1.0
+           },
+           "constant": {
+               "factor": 1.0,
+               "total_iters": 50
+           }
+       },
+       "lr_scheduler": "exponential",
+       "loss": "cross entropy",
+       "start_lr": 0.003,
+       "device": "cuda",
+       "steps_to_log": 50,
+       "batch_size": 8192,
+       "max_epochs": 50,
+       "early_stopping_epoch_count": 5,
+       "early_stopping_progress_threshold": 0.001,
+       "num_workers": 8,
+       "weight_particles_species": false
+    },
+    "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC24b1-527108-AODS-1-8-with-nsigma.root"],
+    "exp_dataset_paths": [],
+    "project_dir": "attention_hyperparameter_tuning_lr_schedulers_exponential",
+    "results_dir": "results",
+    "mixed_precision": false,
+    "seed": 0,
+    "config_path": null
+}

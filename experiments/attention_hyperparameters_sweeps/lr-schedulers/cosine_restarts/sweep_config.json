@@ -1,0 +1,54 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "model": {
+          "parameters": {
+            "attention": {
+              "parameters": {
+                "dropout": {
+                  "values": [
+                    0.0,
+                    0.01,
+                    0.1,
+                    0.2
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "training": {
+          "parameters": {
+            "lr_schedulers": {
+              "parameters": {
+                "cosine_restarts": {
+                  "parameters": {
+                    "first_cycle_epochs": {
+                        "values": [5, 10, 20]
+                    },
+                    "cycle_epoch_inc": {
+                        "values": [2, 5, 10]
+                    },
+                  }
+                }
+              }
+            },
+            "start_lr": {
+              "values": [
+                0.001,
+                0.0003,
+                0.00001
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

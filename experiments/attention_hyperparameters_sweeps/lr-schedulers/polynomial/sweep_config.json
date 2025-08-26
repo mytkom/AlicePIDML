@@ -1,0 +1,51 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "model": {
+          "parameters": {
+            "attention": {
+              "parameters": {
+                "dropout": {
+                  "values": [
+                    0.0,
+                    0.01,
+                    0.1,
+                    0.2
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "training": {
+          "parameters": {
+            "lr_schedulers": {
+              "parameters": {
+                "polynomial": {
+                  "parameters": {
+                    "power": {
+                        "values": [0.5, 0.8, 1.0, 1.2, 1.5]
+                    }
+                  }
+                }
+              }
+            },
+            "start_lr": {
+              "values": [
+                0.001,
+                0.0003,
+                0.00001
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
