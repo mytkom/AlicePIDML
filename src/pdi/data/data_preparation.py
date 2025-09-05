@@ -27,8 +27,8 @@ from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from pdi.constants import TARGET_CODES
-from pdi.data.group_id_helpers import binary_array_to_group_id
+from pdi.constants import TARGET_CODE_TO_PART_NAME, TARGET_CODES
+from pdi.data.group_id_helpers import binary_array_to_group_id, group_id_to_detectors_available
 from pdi.data.constants import (
     PART_DICT,
     PROCESSED_DIR,
@@ -36,6 +36,7 @@ from pdi.data.constants import (
     COLUMNS_FOR_TRAINING,
     NSIGMA_COLUMNS,
 )
+from pdi.data.outlier_filtering import build_outlier_filtering
 from pdi.data.types import GroupID, InputTarget, Split
 from pdi.config import DataConfig
 from pdi.results_and_metrics import TestResults
@@ -495,6 +496,10 @@ class DataPreparation:
         #   split ratios are specified in DataConfig self._cfg
         test_train_split: dict[Split, pd.DataFrame] = self._test_train_split(data)
 
+        # Outlier filtering
+        if self._cfg.outlier_filtering_method:
+            test_train_split[Split.TRAIN] = self._filter_outliers(test_train_split[Split.TRAIN])
+
         # Standardization parameters (mean, std) based on train split
         #   results are saved in self._scaling_params
         if not self._is_experimental:
@@ -858,6 +863,36 @@ class DataPreparation:
             Split.VAL: pd.DataFrame(val_data),
             Split.TEST: pd.DataFrame(test_data),
         }
+
+    def _filter_outliers(self, train_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filters outliers from the training data by grouping the data by missing columns
+        and target codes, then applying the outlier filtering logic.
+
+        Args:
+            train_data (pd.DataFrame): The training data to filter.
+
+        Returns:
+            pd.DataFrame: The filtered training data.
+        """
+        final_indices = []
+        # Group by missing columns
+        for gid, missing_group_data in self._group_data(train_data).items():
+            # Group data by the target column
+            target_groups = missing_group_data.groupby(
+                TARGET_COLUMN, dropna=False
+            )
+            for target_code, target_group_ids in target_groups.groups.items():
+                self._log(f"Filtering outliers of {TARGET_CODE_TO_PART_NAME[target_code]} for GID {gid}...")
+                outlier_filtering = build_outlier_filtering(self._cfg, self._seed)
+                part_df = missing_group_data.loc[target_group_ids, self._cfg.outlier_filtering_methods.columns].dropna(axis=1)
+                inliers_mask = outlier_filtering(part_df)
+                final_indices.extend(part_df.index[inliers_mask])
+
+        train_data_len = train_data.shape[0]
+        outliers_count = train_data_len - len(final_indices)
+        self._log(f"Filtered {outliers_count} outliers ({float(outliers_count)/train_data_len:.4f} % of train data)")
+        return train_data.loc[final_indices]
 
     def _calc_nsigma_normalized(
         self, unstd: pd.DataFrame, threshold: float

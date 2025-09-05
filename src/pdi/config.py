@@ -6,49 +6,48 @@ from typing import List, Literal, Optional
 from dataclass_wizard import JSONPyWizard
 
 
-# TODO: describe those methods here and fill config fields
 @dataclasses.dataclass
 class OCSVMConfig:
-    pass
-
+    kernel: str = "rbf"  # Kernel type: 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'
+    degree: int = 3  # Degree of the polynomial kernel function (if kernel='poly')
+    gamma: str | float = "scale"  # Kernel coefficient for 'rbf', 'poly', and 'sigmoid'
+    coef0: float = 0.0  # Independent term in kernel function (if kernel='poly' or 'sigmoid')
+    tol: float = 1e-3  # Tolerance for stopping criterion
+    nu: float = 0.005  # An upper bound on the fraction of margin errors and a lower bound of support vectors
+    shrinking: bool = True  # Whether to use the shrinking heuristic
+    cache_size: float = 400.0  # Cache size (in MB) for storing kernel values
 
 @dataclasses.dataclass
 class IsolationForestConfig:
-    pass
-
+    n_estimators: int = 100  # Number of base estimators in the ensemble
+    max_samples: float | Literal['auto'] = "auto"  # Number of samples to draw from the dataset to train each base estimator
+    contamination: float | Literal['auto'] = 0.01  # Proportion of outliers in the dataset ('auto' or a float value)
+    max_features: int | float = 1.0  # Number of features to draw from the dataset to train each base estimator
+    bootstrap: bool = False  # Whether to use bootstrap sampling
+    n_jobs: int = -1  # Number of parallel jobs (-1 means using all processors)
 
 @dataclasses.dataclass
 class IQRConfig:
-    pass
-
+    multiplier: float = 8. # Multiplier for the interquartile range to define outliers
 
 @dataclasses.dataclass
 class OutlierFilteringConfig:
+    columns: List[str] = dataclasses.field(default_factory=lambda: ["fBeta", "fTOFSignal", "fTPCSignal", "fP"])
     ocsvm: OCSVMConfig = dataclasses.field(default_factory=OCSVMConfig)
-    isolation_forest: IsolationForestConfig = dataclasses.field(
-        default_factory=IsolationForestConfig
-    )
+    isolation_forest: IsolationForestConfig = dataclasses.field(default_factory=IsolationForestConfig)
     iqr: IQRConfig = dataclasses.field(default_factory=IQRConfig)
 
-
-# Config related to data preparation process:
-# - preprocessing
-# - splitting
-# - grouping
 @dataclasses.dataclass
 class DataConfig:
-    # TODO: describe outlier filtering and options here
-    outlier_filtering_methods: OutlierFilteringConfig = dataclasses.field(
-        default_factory=OutlierFilteringConfig
-    )
-    outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation forest"] = None
+    outlier_filtering_methods: OutlierFilteringConfig = dataclasses.field(default_factory=OutlierFilteringConfig)
+    outlier_filtering_method: None | Literal["iqr", "ocsvm", "isolation_forest"] = None  # Selected filtering method
 
-    # Train/Validation/Test dataset split ratios. Validation is calculated automatically 1 - train_size - test_size
-    # 0.64/0.16/0.2 split was proposed in literature: http://arxiv.org/abs/2504.16109
+    # Train/Validation/Test dataset split ratios. Validation is calculated as 1 - train_size - test_size.
+    # 0.64/0.16/0.2 split is proposed in literature: http://arxiv.org/abs/2504.16109
     train_size: float = 0.64
     test_size: float = 0.2
 
-    # Is it data from ALICE Run 3? Different missing values of signals are dependant of this setting.
+    # Is it data from ALICE Run 3? Different missing values of signals depend on this setting.
     is_run_3: bool = True
 
 

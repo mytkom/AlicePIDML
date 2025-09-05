@@ -1,6 +1,6 @@
 import gzip
 import pickle
-from typing import List, Optional
+from typing import Optional
 from joblib.pool import np
 from numpy.typing import NDArray
 from sklearn.metrics import precision_score, recall_score, f1_score

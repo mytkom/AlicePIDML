@@ -1,11 +1,35 @@
 {
     "data": {
         "outlier_filtering_methods": {
-            "ocsvm": {},
-            "isolation_forest": {},
-            "iqr": {}
+            "columns": [
+                "fBeta",
+                "fTOFSignal",
+                "fTPCSignal",
+                "fP"
+            ],
+            "ocsvm": {
+                "kernel": "rbf",
+                "degree": 3,
+                "gamma": "scale",
+                "coef0": 0.0,
+                "tol": 0.001,
+                "nu": 0.005,
+                "shrinking": true,
+                "cache_size": 400.0
+            },
+            "isolation_forest": {
+                "n_estimators": 100,
+                "max_samples": "auto",
+                "contamination": 0.01,
+                "max_features": 1.0,
+                "bootstrap": false,
+                "n_jobs": -1
+            },
+            "iqr": {
+                "multiplier": 8.0
+            }
         },
-        "outlier_filtering_method": null,
+        "outlier_filtering_method": "isolation_forest",
         "train_size": 0.64,
         "test_size": 0.2,
         "is_run_3": true
@@ -119,7 +143,7 @@
        "lr_scheduler": "exponential",
        "loss": "cross entropy",
        "start_lr": 0.003,
-       "device": "cuda",
+       "device": "cpu",
        "steps_to_log": 50,
        "batch_size": 8192,
        "max_epochs": 50,
