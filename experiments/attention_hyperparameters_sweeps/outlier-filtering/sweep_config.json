@@ -1,0 +1,28 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "seed": {
+          "values": [12, 24, 36, 48]
+        },
+        "data": {
+          "parameters": {
+            "outlier_filtering_method": {
+                  "values": [
+                    null,
+                    "ocsvm",
+                    "isolation_forest",
+                    "iqr"
+                  ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
