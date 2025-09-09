@@ -1,0 +1,64 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "data": {
+          "parameters": {
+            "outlier_filtering_methods": {
+              "parameters": {
+                "columns": {
+                  "values": [
+                    [
+                      "fBeta",
+                      "fTOFSignal",
+                      "fTPCSignal",
+                      "fP"
+                    ],
+                    [
+                      "fTPCSignal",
+                      "fTOFSignal",
+                      "fBeta",
+                      "fPx",
+                      "fPy",
+                      "fPz",
+                      "fX",
+                      "fY",
+                      "fZ",
+                      "fAlpha",
+                      "fDcaXY",
+                      "fDcaZ"
+                    ],
+                    [
+                      "fTPCSignal",
+                      "fTOFSignal",
+                      "fBeta",
+                      "fPx",
+                      "fPy",
+                      "fPz",
+                      "fX",
+                      "fY",
+                      "fZ",
+                    ]
+
+                  ]
+                },
+                "iqr": {
+                  "parameters": {
+                    "multiplier": {
+                      "values": [5.0, 6.0, 7.0, 8.0, 9.0]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
