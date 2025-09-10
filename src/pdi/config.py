@@ -50,6 +50,11 @@ class DataConfig:
     # Is it data from ALICE Run 3? Different missing values of signals depend on this setting.
     is_run_3: bool = True
 
+    # Choose randomly (using general seed) subset of the full dataset before any preprocessing
+    # If None use all the available data
+    subset_size: int | None = None
+
+
 
 @dataclasses.dataclass
 class AdamWConfig:

@@ -480,6 +480,12 @@ class DataPreparation:
         # It expects data in ROOT format, which is extracted using O2Physics' task PIDMLProducer.
         # This method can distinguish 4 data formats (simulated or experimental + basic or extended)
         data = self._load_data()
+        self._log(f"Number of observations in complete loaded dataset {data.shape[0]}")
+
+        # Get the subset of all data before further processing
+        if self._cfg.subset_size:
+            data = data.sample(n=self._cfg.subset_size, random_state=self._seed)
+            self._log(f"Number of observations after subset filtering {data.shape[0]}")
 
         # TODO: investigate, why is it needed
         # Later, after splits and grouping some observation can be the only one of its class,
