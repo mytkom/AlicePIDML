@@ -165,7 +165,6 @@
        "weight_particles_species": false
     },
     "sim_dataset_paths": [
-      "data/raw/MC_ALL_AO2D_LHC24b1-527108-AODS-1-8-with-nsigma.root",
       "data/raw/MC_ALL_AO2D_LHC24e3-526641-from-001-to-007.root",
       "data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"
     ],

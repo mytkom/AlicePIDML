@@ -32,7 +32,8 @@
         "outlier_filtering_method": null,
         "train_size": 0.64,
         "test_size": 0.2,
-        "is_run_3": true
+        "is_run_3": true,
+        "subset_size": null
     },
     "model": {
         "architecture": "attention",
