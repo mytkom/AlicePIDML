@@ -1,0 +1,39 @@
+{
+  "method": "grid",
+  "metric": {
+    "name": "val/f1_best",
+    "goal": "maximize"
+  },
+  "parameters": {
+    "sweep": {
+      "parameters": {
+        "data": {
+          "parameters": {
+            "subset_size": {
+              "values": [
+                100000,
+                1000000,
+                5000000,
+                10000000,
+                15000000,
+                null
+              ]
+            }
+          }
+        },
+        "training": {
+          "parameters": {
+            "undersample_pions": {
+              "values": [true, false]
+            }
+          }
+        },
+        "seed": {
+          "values": [
+            12, 24, 36, 48, 60
+          ]
+        }
+      }
+    }
+  }
+}
