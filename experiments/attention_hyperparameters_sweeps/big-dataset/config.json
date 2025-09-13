@@ -165,7 +165,7 @@
        "weight_particles_species": false
     },
     "sim_dataset_paths": [
-      "data/raw/MC_ALL_AO2D_LHC24f3-39-AODs.root",
+      "data/raw/MC_ALL_AO2D_LHC24f3-39-AODs.root"
     ],
     "exp_dataset_paths": [],
     "project_dir": "attention_hyperparameter_tuning/big-dataset",
