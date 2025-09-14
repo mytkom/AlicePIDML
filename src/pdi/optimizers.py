@@ -11,7 +11,7 @@ def build_optimizer(cfg: TrainingConfig, model: nn.Module):
             lr=cfg.start_lr,
             weight_decay=cfg.optimizers.adamw.weight_decay,
         )
-    elif cfg.optimizer == "sgd":
+    if cfg.optimizer == "sgd":
         return SGD(
             model.parameters(),
             lr=cfg.start_lr,
@@ -19,5 +19,4 @@ def build_optimizer(cfg: TrainingConfig, model: nn.Module):
             nesterov=cfg.optimizers.sgd.nesterov,
             weight_decay=cfg.optimizers.sgd.weight_decay,
         )
-    else:
-        raise KeyError(f"Optimizer {cfg.optimizer} is not known!")
+    raise KeyError(f"Optimizer {cfg.optimizer} is not known!")

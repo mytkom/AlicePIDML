@@ -33,14 +33,14 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             activation=ACTIVATIONS[cfg.mlp.activation],
             dropout=cfg.mlp.dropout,
         )
-    elif cfg.architecture == "ensemble":
+    if cfg.architecture == "ensemble":
         return NeuralNetEnsemble(
             group_ids=group_ids,
             hidden_layers=cfg.ensemble.hidden_layers,
             activation=ACTIVATIONS[cfg.ensemble.activation],
             dropout=cfg.ensemble.dropout,
         )
-    elif cfg.architecture == "attention":
+    if cfg.architecture == "attention":
         return AttentionModel(
             in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
@@ -53,7 +53,7 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             activation=ACTIVATIONS[cfg.attention.activation],
             dropout=cfg.attention.dropout,
         )
-    elif cfg.architecture == "attention_dann":
+    if cfg.architecture == "attention_dann":
         return AttentionModelDANN(
             in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
@@ -68,8 +68,7 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             dropout=cfg.attention_dann.attention.dropout,
             alpha=cfg.attention_dann.alpha,
         )
-    else:
-        raise KeyError(f"Architecture {cfg.architecture} does not exist!")
+    raise KeyError(f"Architecture {cfg.architecture} does not exist!")
 
 
 class NeuralNet(nn.Module):
@@ -138,7 +137,7 @@ class NeuralNetEnsemble(nn.Module):
 
         # caching tuple -> group_id to save few transformations during inference
         self.group_id_map = {
-            tuple(tuple([bool(b) for b in group_id_to_binary_array(g_id)])): str(g_id)
+            tuple(bool(b) for b in group_id_to_binary_array(g_id)): str(g_id)
             for g_id in group_ids
         }
 
@@ -251,19 +250,18 @@ class AttentionModel(nn.Module):
 
 
 # DANN
+# pylint: disable=abstract-method,arguments-differ
 class ReverseLayerF(Function):
     @staticmethod
     def forward(ctx, x, alpha):
         ctx.alpha = alpha
-
         return x.view_as(x)
 
     @staticmethod
     def backward(ctx, grad_output):
         output = grad_output.neg() * ctx.alpha
-
         return output, None
-
+# pylint: enable=abstract-method,arguments-differ
 
 class AttentionModelDANN(AttentionModel):
     """AttentionModelDANN is an attention-based model with Domain Adversarial Neural Network (DANN) capabilities."""

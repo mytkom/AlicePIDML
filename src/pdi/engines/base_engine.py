@@ -2,7 +2,7 @@ from abc import abstractmethod
 import dataclasses
 import json
 import os
-from typing import Optional
+from typing import Optional, Dict
 from joblib.pool import np
 from pandas.io.parsers.readers import csv
 from torch import nn
@@ -11,7 +11,8 @@ import wandb
 from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.config import Config
 from pdi.data.constants import COLUMNS_FOR_TRAINING
-from pdi.data.data_preparation import DataPreparation
+from pdi.data.types import Split, GroupID
+from pdi.data.data_preparation import CombinedDataLoader, DataPreparation
 from pdi.results_and_metrics import TestResults
 
 
@@ -134,9 +135,75 @@ class BaseEngine:
             if not file_exists:
                 writer.writeheader()  # Write header if file doesn't exist
             writer.writerow({"step": step, **metrics} if step else metrics)
+    
+    @staticmethod
+    def setup_dataloaders(cfg, data_prep: DataPreparation) -> tuple[CombinedDataLoader, CombinedDataLoader, CombinedDataLoader]:
+        batch_sizes = {
+            Split.TRAIN: cfg.training.batch_size,
+            Split.VAL: cfg.validation.batch_size,
+            Split.TEST: cfg.validation.batch_size,
+        }
+        num_workers = {
+            Split.TRAIN: cfg.training.num_workers,
+            Split.VAL: cfg.validation.num_workers,
+            Split.TEST: cfg.training.num_workers,
+        }
+        dataloaders = data_prep.create_dataloaders(
+            batch_size=batch_sizes,
+            num_workers=num_workers,
+            undersample_missing_detectors=cfg.training.undersample_missing_detectors,
+            undersample_pions=cfg.training.undersample_pions,
+        )
+        return dataloaders[Split.TRAIN], dataloaders[Split.VAL], dataloaders[Split.TEST]
 
 
 class TorchBaseEngine(BaseEngine):
+    @staticmethod
+    def log_training_metrics(
+        log_results_func,
+        group_losses: Dict[GroupID, np.ndarray],
+        loss_run_sum: float,
+        step: int,
+        loader_len: int,
+        epoch: int,
+        steps_to_log: int,
+        csv_name: str = "training_loss.csv",
+    ):
+        """
+        Logs training metrics and group losses.
+
+        Args:
+            log_results_func: Function to log results.
+            group_losses: Dictionary of group losses.
+            loss_run_sum: Cumulative loss for the current step.
+            step: Current step in the training loop.
+            loader_len: Total number of steps in the loader.
+            epoch: Current epoch number.
+            steps_to_log: Number of steps between logging.
+            csv_name: Name of the CSV file to log training loss.
+        """
+        if step % steps_to_log == 0:
+            log_results_func(
+                metrics={"loss": loss_run_sum},
+                step=loader_len * epoch + step,
+                csv_name=csv_name,
+            )
+            loss_run_sum = 0
+
+        for gid, gid_losses in group_losses.items():
+            if len(gid_losses) == 0:
+                continue
+
+            log_results_func(
+                metrics={
+                    "gid": gid,
+                    "mean_loss_epoch": gid_losses.mean(),
+                    "gid_count": len(gid_losses),
+                },
+                csv_name="gid_losses.csv",
+                offline=True,
+            )
+
     def _save_best_model(self, model: nn.Module, epoch: int, threshold: float):
         """
         Helper function suitable to save best model of pytorch training engine.
@@ -238,9 +305,8 @@ class TorchBaseEngine(BaseEngine):
                 self._best_f1 = val_f1
                 self._save_best_model(model, epoch, threshold)
             return True
-        else:
-            self._epochs_since_last_progress += 1
-            return False
+        self._epochs_since_last_progress += 1
+        return False
 
     def _should_early_stop(self):
         if self._cfg.training.early_stopping_epoch_count == 0:
@@ -250,4 +316,7 @@ class TorchBaseEngine(BaseEngine):
             self._epochs_since_last_progress
             >= self._cfg.training.early_stopping_epoch_count
         )
+
+    def _test(self, model_dirpath: Optional[str] = None) -> TestResults:
+        raise NotImplementedError("_test method is not implemented in base torch engine, do it in its child class.")
 

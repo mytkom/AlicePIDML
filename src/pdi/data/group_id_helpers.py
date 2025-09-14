@@ -1,9 +1,10 @@
 from typing import Literal
-from pdi.data.types import Detector, COLUMN_DETECTOR, GroupID
-from pdi.data.constants import COLUMNS_FOR_TRAINING
 import pandas as pd
 import numpy as np
 from numpy.typing import NDArray
+
+from pdi.data.types import Detector, COLUMN_DETECTOR, GroupID
+from pdi.data.constants import COLUMNS_FOR_TRAINING
 
 
 def filter_strings_by_binary(
@@ -38,7 +39,7 @@ def group_id_to_detectors_available(group_id: GroupID) -> list[Detector]:
     )
     detectors = [Detector.TPC, Detector.TOF, Detector.TRD]
     for col in missing_columns:
-        if col in COLUMN_DETECTOR.keys() and COLUMN_DETECTOR[col] in detectors:
+        if col in COLUMN_DETECTOR and COLUMN_DETECTOR[col] in detectors:
             detectors.remove(COLUMN_DETECTOR[col])
     return detectors
 

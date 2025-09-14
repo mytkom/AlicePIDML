@@ -1,12 +1,15 @@
+# pylint: disable=duplicate-code
+
+import os
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
-from torch.functional import Tensor
 import torch
-import os
+from torch.functional import Tensor
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from tqdm import tqdm
+
 from pdi.config import Config
 from pdi.data.data_preparation import (
     CombinedDataLoader,
@@ -16,7 +19,7 @@ from pdi.data.data_preparation import (
     DataPreparation,
     MCBatchItemOut,
 )
-from pdi.data.types import GroupID, Split
+from pdi.data.types import GroupID
 from pdi.engines.base_engine import TorchBaseEngine
 from pdi.results_and_metrics import (
     TestResults,
@@ -39,49 +42,21 @@ class DomainAdaptationEngine(TorchBaseEngine):
     ) -> None:
         super().__init__(cfg, target_code, base_dir)
         self._sim_data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
-        (self._sim_train_dl, self._sim_val_dl, self._sim_test_dl) = (
-            self._sim_data_prep.create_dataloaders(
-                batch_size={
-                    Split.TRAIN: self._cfg.training.batch_size,
-                    Split.VAL: self._cfg.validation.batch_size,
-                    Split.TEST: self._cfg.validation.batch_size,
-                },
-                num_workers={
-                    Split.TRAIN: self._cfg.training.num_workers,
-                    Split.VAL: self._cfg.validation.num_workers,
-                    Split.TEST: self._cfg.validation.num_workers,
-                },
-                undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
-                undersample_pions=self._cfg.training.undersample_pions,
-            )
-        )
+
+        self._sim_train_dl, self._sim_val_dl, self._sim_test_dl = self.setup_dataloaders(self._cfg, self._sim_data_prep) 
         if self._sim_data_prep._is_experimental:
             raise RuntimeError(
                 "DomainAdaptationEngine: Expected simulated data, but got experimental data in cfg.sim_dataset_paths!"
             )
 
+        # Experimental
         self._exp_data_prep = DataPreparation(
             cfg.data,
             cfg.exp_dataset_paths,
             cfg.seed,
             scaling_params=self._sim_data_prep._scaling_params,
         )
-        (self._exp_train_dl, self._exp_val_dl, self._exp_test_dl) = (
-            self._exp_data_prep.create_dataloaders(
-                batch_size={
-                    Split.TRAIN: self._cfg.training.batch_size,
-                    Split.VAL: self._cfg.validation.batch_size,
-                    Split.TEST: self._cfg.validation.batch_size,
-                },
-                num_workers={
-                    Split.TRAIN: self._cfg.training.num_workers,
-                    Split.VAL: self._cfg.validation.num_workers,
-                    Split.TEST: self._cfg.validation.num_workers,
-                },
-                undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
-                undersample_pions=self._cfg.training.undersample_pions,
-            )
-        )
+        self._exp_train_dl, self._exp_val_dl, self._exp_test_dl = self.setup_dataloaders(self._cfg, self._exp_data_prep) 
         if not self._exp_data_prep._is_experimental:
             raise RuntimeError(
                 "DomainAdaptationEngine: Expected experiments data, but got simulated data in cfg.exp_dataset_paths!"
@@ -169,8 +144,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
                     min_loss=min_loss,
                     val_f1=class_val_metrics.f1,
                 )
-                if val_loss < min_loss:
-                    min_loss = val_loss
+                min_loss = min(min_loss, val_loss)
 
                 # Log validation metrics
                 self._log_results(
@@ -225,9 +199,9 @@ class DomainAdaptationEngine(TorchBaseEngine):
         # sim and exp in each iteration. Maybe it will improve results---distributions
         # between groups can differ.
         for i in tqdm(range(1, loader_len + 1), desc="Training DANN", total=loader_len):
-            sim_inputs, sim_targets, sim_gids, _ = next(sim_iter)
-            sim_gid: GroupID = cast(GroupID, sim_gids[0])
-            exp_inputs, exp_gids, _ = next(exp_iter)
+            sim_inputs, sim_targets, _, _ = next(sim_iter)
+            # sim_gid: GroupID = cast(GroupID, sim_gids[0])
+            exp_inputs, _, _ = next(exp_iter)
 
             sim_inputs = sim_inputs.to(self._cfg.training.device)
             exp_inputs = exp_inputs.to(self._cfg.training.device)
@@ -269,30 +243,14 @@ class DomainAdaptationEngine(TorchBaseEngine):
             final_loss += loss.item()
             count += 1
 
-            if sim_gid not in group_losses.keys():
-                group_losses[sim_gid] = np.array([])
-            np.append(group_losses[sim_gid], loss.item())
-
-            if i % self._cfg.training.steps_to_log == 0:
-                self._log_results(
-                    metrics={"loss": loss_run_sum},
-                    step=loader_len * epoch + i,
-                    csv_name="training_loss.csv",
-                )
-                loss_run_sum = 0
-
-        for gid, gid_losses in group_losses.items():
-            if len(gid_losses) == 0:
-                continue
-
-            self._log_results(
-                metrics={
-                    "gid": gid,
-                    "mean_loss_epoch": gid_losses.mean(),
-                    "gid_count": len(gid_losses),
-                },
-                csv_name="gid_losses.csv",
-                offline=True,
+            self.log_training_metrics(
+                log_results_func=self._log_results,
+                group_losses=group_losses,
+                loss_run_sum=loss_run_sum,
+                step=i,
+                loader_len=loader_len,
+                epoch=epoch,
+                steps_to_log=self._cfg.training.steps_to_log,
             )
 
         return final_loss / count
@@ -328,7 +286,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
         # TODO: Consider training common GroupID missing detector combination for
         # sim and exp in each iteration. Maybe it will improve results---distributions
         # between groups can differ.
-        for i in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
+        for _ in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
             sim_inputs, sim_targets, _, _ = next(sim_iter)
 
             class_results["targets"].extend(sim_targets.cpu().detach().numpy())
@@ -461,7 +419,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
         # TODO: Consider training common GroupID missing detector combination for
         # sim and exp in each iteration. Maybe it will improve results---distributions
         # between groups can differ.
-        for i in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
+        for _ in tqdm(range(loader_len), desc="Training DANN", total=loader_len):
             sim_inputs, sim_targets, _, _ = next(sim_iter)
 
             exp_inputs, _, _ = next(exp_iter)

@@ -2,15 +2,9 @@ import dataclasses
 import gzip
 import json
 import os
+import hashlib
 import pickle
 import warnings
-from numpy.typing import NDArray
-from sklearn.preprocessing import MinMaxScaler
-import uproot3
-import numpy as np
-import pandas as pd
-import torch
-import hashlib
 from pathlib import Path
 from random import Random
 from typing import (
@@ -23,12 +17,19 @@ from typing import (
     List,
     MutableMapping,
 )
+
+import numpy as np
+from numpy.typing import NDArray
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
+import uproot3
+import pandas as pd
+import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from pdi.constants import TARGET_CODE_TO_PART_NAME, TARGET_CODES
-from pdi.data.group_id_helpers import binary_array_to_group_id, group_id_to_detectors_available
+from pdi.data.group_id_helpers import binary_array_to_group_id 
 from pdi.data.constants import (
     PART_DICT,
     PROCESSED_DIR,
@@ -63,7 +64,7 @@ class MCDataset(Dataset[MCBatchItem]):
 
     def __init__(
         self,
-        input: Tensor,
+        input_tensor: Tensor,
         target: Tensor,
         group_id: GroupID,
         **unstandardized: Tensor,
@@ -76,7 +77,7 @@ class MCDataset(Dataset[MCBatchItem]):
             group_id (GroupID): ID of missing detectors group (binary representation of available columns)
             **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
         """
-        self._input = input
+        self._input = input_tensor
         self._target = target
         self._group_id = group_id
         self._unstandardized = unstandardized
@@ -116,7 +117,7 @@ class ExpDataset(Dataset[ExpBatchItem]):
 
     def __init__(
         self,
-        input: Tensor,
+        input_tensor: Tensor,
         group_id: GroupID,
         **unstandardized: Tensor,
     ):
@@ -127,7 +128,7 @@ class ExpDataset(Dataset[ExpBatchItem]):
             group_id (GroupID): ID of missing detectors group (binary representation of available columns)
             **unstandardized (Tensor): dict of tensors containing unstandardized training columns (+ nSigma columns if available) information
         """
-        self._input = input
+        self._input = input_tensor
         self._group_id = group_id
         self._unstandardized = unstandardized
 
@@ -221,7 +222,7 @@ class CombinedDataLoader(Generic[InT, OutT]):
 
     def __len__(self) -> int:
         if self.undersample:
-            return len(self.dataloaders) * min([len(d) for d in self.dataloaders])
+            return len(self.dataloaders) * min(len(d) for d in self.dataloaders)
         return sum(len(d) for d in self.dataloaders)
 
     def unwrap(self) -> pd.DataFrame:
@@ -275,12 +276,12 @@ def calculate_checksum(
     Returns:
         str: The calculated checksum as a hexadecimal string.
     """
-    hash = hashlib.md5()
+    checksum_hash = hashlib.md5()
 
     # Include file contents in the checksum
     for fn in filenames:
         try:
-            hash.update(Path(fn).read_bytes())
+            checksum_hash.update(Path(fn).read_bytes())
         except IsADirectoryError:
             pass
 
@@ -290,9 +291,9 @@ def calculate_checksum(
     if scaling_params is not None:
         dict_config["scaling_params"] = scaling_params.to_dict()
     config_json = json.dumps(dict_config, sort_keys=True)
-    hash.update(config_json.encode("utf-8"))
+    checksum_hash.update(config_json.encode("utf-8"))
 
-    return hash.hexdigest()
+    return checksum_hash.hexdigest()
 
 
 def is_experimental_data(table_name):
@@ -417,6 +418,7 @@ class DataPreparation:
     configured to change the behaviour of the class.
     """
 
+    # pylint: disable=duplicate-code
     COLUMNS_TO_SCALE_RUN_3 = [
         "fTPCSignal",
         "fTOFSignal",
@@ -429,6 +431,7 @@ class DataPreparation:
         "fDcaXY",
         "fDcaZ",
     ]
+    # pylint: enable=duplicate-code
 
     # TRDSignal scaling in run2
     COLUMNS_TO_SCALE_RUN_2 = COLUMNS_TO_SCALE_RUN_3 + ["fTRDSignal"]
@@ -511,7 +514,7 @@ class DataPreparation:
         if not self._is_experimental:
             self._calc_scaling_params(test_train_split[Split.TRAIN])
         else:
-            if not self._scaling_params.size > 0:
+            if self._scaling_params.size <= 0:
                 raise AttributeError(
                     "[DataPreparation] For experimental data scaling params must be set in constructor!"
                 )
@@ -545,11 +548,14 @@ class DataPreparation:
         # Cache prepared data using checksum calculated in constructor.
         self._save_data()
 
-    def get_prepared_data(self, splits: List[Split] = list(Split)) -> PreparedData:
+    def get_prepared_data(self, splits: List[Split] | None = None) -> PreparedData:
         """
         Returns PreparedData object. If splits passed to this function are not loaded to self._prepared_data
         it is first loaded. If additional splits are already loaded, they are being returned too.
         """
+        if not splits:
+            splits = list(Split)
+
         self._load_or_prepare_data(splits)
 
         return self._prepared_data
@@ -597,11 +603,9 @@ class DataPreparation:
         num_workers: dict[Split, int],
         undersample_missing_detectors: bool,
         undersample_pions: bool,
-    ) -> tuple[
+    ) -> dict[Split,
         CombinedDataLoader[MCBatchItem, MCBatchItemOut]
-        | CombinedDataLoader[MCBatchItem, ExpBatchItemOut],
-        ...,
-    ]:
+        | CombinedDataLoader[MCBatchItem, ExpBatchItemOut]]:
         """prepare_dataloaders creates dataloaders from preprocessed data.
 
         Args:
@@ -619,8 +623,8 @@ class DataPreparation:
                 This ensures that both dictionaries define the same splits.
 
         Returns:
-            tuple[CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut], ...]:
-                A tuple of combined dataloaders, one for each split.
+            dict[Split, CombinedDataLoader[MCBatchItem, MCBatchItemOut] | CombinedDataLoader[MCBatchItem, ExpBatchItemOut]]:
+                A dict of combined dataloaders, one for each split (given in batch_size keys).
         """
         if batch_size.keys() == num_workers.keys():
             splits = batch_size.keys()
@@ -697,7 +701,7 @@ class DataPreparation:
                 ],
             )
 
-        return (*dataloaders.values(),)
+        return dataloaders
 
     def transform_prepared_data(
         self, transform: Callable[[PreparedData], PreparedData]
@@ -759,14 +763,14 @@ class DataPreparation:
 
         self.save_dataset_metadata(self.save_dir)
 
-    def save_dataset_metadata(self, dir: str):
+    def save_dataset_metadata(self, output_directory: str):
         self._scaling_params.to_json(
-            f"{dir}/scaling_params.json",
+            f"{output_directory}/scaling_params.json",
             index=False,
             orient="split",
         )
 
-        with open(f"{dir}/dataset_metadata.json", "w+", encoding="UTF-8") as f:
+        with open(f"{output_directory}/dataset_metadata.json", "w+", encoding="UTF-8") as f:
             f.write(
                 json.dumps({
                     "is_experimental": self._is_experimental,
@@ -777,7 +781,7 @@ class DataPreparation:
                 })
             )
 
-        with open(f"{dir}/columns_for_training.json", "w+", encoding="UTF-8") as f:
+        with open(f"{output_directory}/columns_for_training.json", "w+", encoding="UTF-8") as f:
             f.write(json.dumps({"columns_for_training": COLUMNS_FOR_TRAINING}))
 
     def _load_data(self) -> pd.DataFrame:

@@ -1,9 +1,9 @@
 from abc import abstractmethod, ABC
 import dataclasses
+from typing import Any
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
-from typing import Any
 from numpy.typing import NDArray
 
 from pdi.config import DataConfig
@@ -45,9 +45,8 @@ class OneClassSVMFilter(OutlierFilteringMethod):
 def build_outlier_filtering(cfg: DataConfig, seed: int) -> OutlierFilteringMethod:
     if cfg.outlier_filtering_method == "iqr":
         return IQRFilter(iqr_multiplier=cfg.outlier_filtering_methods.iqr.multiplier)
-    elif cfg.outlier_filtering_method == "isolation_forest":
+    if cfg.outlier_filtering_method == "isolation_forest":
         return IsolationForestFilter(random_state=seed, **dataclasses.asdict(cfg.outlier_filtering_methods.isolation_forest))
-    elif cfg.outlier_filtering_method == "ocsvm":
+    if cfg.outlier_filtering_method == "ocsvm":
         return OneClassSVMFilter(**dataclasses.asdict(cfg.outlier_filtering_methods.ocsvm))
-    else:
-        raise KeyError(f"Unknown outlier filtering method: {cfg.outlier_filtering_method}")
+    raise KeyError(f"Unknown outlier filtering method: {cfg.outlier_filtering_method}")

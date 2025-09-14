@@ -11,14 +11,14 @@ plot_efficiency_comparison
 """
 
 import os
+from typing import Iterator
 import matplotlib.pyplot as plt
-from numpy import linspace
 import pandas as pd
-import numpy as np
 from sklearn.metrics import precision_recall_curve
 from matplotlib.figure import Figure
+import numpy as np
+from numpy import linspace
 from numpy.typing import NDArray
-from typing import Iterator
 
 from pdi.constants import TARGET_CODE_TO_PART_NAME
 from pdi.evaluate import get_interval_purity_efficiency
@@ -76,7 +76,7 @@ PT_INTERVALS = list(zip(PT_LINSPACE[:-1], PT_LINSPACE[1:]))
 def plot_metrics_vs_pt_comparison(
     test_metrics: dict[str, TestResults],
     pt: NDArray,
-    pt_intervals=PT_INTERVALS,
+    pt_intervals: list[tuple[float, float]] | None = None,
     save_dir: str | None = None,
 ) -> Iterator[tuple[Figure, str]]:
     """
@@ -110,6 +110,9 @@ def plot_metrics_vs_pt_comparison(
     - The function calculates purity, efficiency, and F1 score for each model over specified pT intervals.
     - It generates and optionally saves a CSV file containing the metrics.
     """
+    if not pt_intervals:
+        pt_intervals = PT_INTERVALS
+
     target_codes = set()
     df = pd.DataFrame()
 
@@ -121,7 +124,7 @@ def plot_metrics_vs_pt_comparison(
             test_result.predictions >= test_result.test_metrics.threshold
         ).astype("int")
 
-        purities_pt_plot, efficiencies_pt_plot, confidence_intervals, momenta_avg = (
+        purities_pt_plot, efficiencies_pt_plot, _, momenta_avg = (
             get_interval_purity_efficiency(targets, selected, pt, pt_intervals)
         )
 
@@ -141,7 +144,7 @@ def plot_metrics_vs_pt_comparison(
         raise AttributeError("Cannot compare results of different target_code!")
     target_code: int = target_codes.pop()
 
-    def plot(metric_name, y_values, y_label, title_suffix, file_suffix):
+    def plot(metric_name, y_label, title_suffix, file_suffix):
         fig = plt.figure(figsize=(10, 6))
         for model_name in test_metrics.keys():
             plt.plot(
@@ -162,22 +165,21 @@ def plot_metrics_vs_pt_comparison(
 
         return fig, f"{file_suffix}-vs-pt.png"
 
-    yield plot("Purity", df.filter(like="Purity").values, "Purity", "", "purity")
+    yield plot("Purity", "Purity", "", "purity")
     yield plot(
         "Efficiency",
-        df.filter(like="Efficiency").values,
         "Efficiency",
         "",
         "efficiency",
     )
-    yield plot("F1", df.filter(like="F1").values, "F1 Score", "", "f1")
+    yield plot("F1", "F1 Score", "", "f1")
 
     if save_dir:
         df.to_csv(os.path.join(save_dir, "metrics-vs-pt.csv"), index=False)
 
 
 def plot_learning_curve(
-    loss: list[float], val_loss: list[float], label: str = None, save_dir: str = None
+    loss: list[float], val_loss: list[float], label: str | None = None, save_dir: str | None = None
 ):
     plt.plot(loss)
     plt.plot(val_loss)

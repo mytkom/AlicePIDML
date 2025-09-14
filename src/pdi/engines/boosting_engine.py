@@ -1,8 +1,8 @@
+from typing import Optional
 from pdi.config import Config
 from pdi.data.data_preparation import (
     DataPreparation,
 )
-from pdi.data.types import Split
 from pdi.engines.base_engine import BaseEngine
 from pdi.results_and_metrics import (
     TestResults,
@@ -20,23 +20,7 @@ class BoostingEngine(BaseEngine):
         super().__init__(cfg, target_code, base_dir)
         self._data_prep = DataPreparation(cfg.data, cfg.sim_dataset_paths, cfg.seed)
 
-        (self._train_dl, self._val_dl, self._test_dl) = (
-            self._data_prep.create_dataloaders(
-                batch_size={
-                    Split.TRAIN: self._cfg.training.batch_size,
-                    Split.VAL: self._cfg.validation.batch_size,
-                    Split.TEST: self._cfg.validation.batch_size,
-                },
-                num_workers={
-                    Split.TRAIN: self._cfg.training.num_workers,
-                    Split.VAL: self._cfg.validation.num_workers,
-                    Split.TEST: self._cfg.validation.num_workers,
-                },
-                undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
-                undersample_pions=self._cfg.training.undersample_pions,
-            )
-        )
-
+        self._train_dl, self._val_dl, self._test_dl = self.setup_dataloaders(self._cfg, self._data_prep) 
         if self._data_prep._is_experimental:
             raise RuntimeError(
                 "ClassicEngine got experimental data, it is not suited to handle it!"
@@ -73,6 +57,7 @@ class BoostingEngine(BaseEngine):
         # print(
         #     f"F1: {val_metrics.f1:.4f}, ..."
         # )
+        pass
 
     def _test(self, model_dirpath: Optional[str] = None) -> TestResults:
         # if model_dirpath is set, then load model from dirpath (see ClassicEngine)
@@ -86,3 +71,4 @@ class BoostingEngine(BaseEngine):
         # )
         #
         # return test_results
+        pass

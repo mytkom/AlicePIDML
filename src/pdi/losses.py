@@ -10,7 +10,5 @@ def build_loss(cfg: TrainingConfig, pos_weight: Optional[Tensor] = None) -> _Los
     if cfg.loss == "cross entropy":
         if pos_weight:
             return BCEWithLogitsLoss(pos_weight=pos_weight)
-        else:
-            return BCEWithLogitsLoss()
-    else:
-        raise KeyError(f"Loss function {cfg.loss} is not known!")
+        return BCEWithLogitsLoss()
+    raise KeyError(f"Loss function {cfg.loss} is not known!")

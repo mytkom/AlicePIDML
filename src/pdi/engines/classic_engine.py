@@ -1,3 +1,5 @@
+# pylint: disable=duplicate-code
+
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
@@ -12,7 +14,7 @@ from pdi.data.data_preparation import (
     DataPreparation,
     MCBatchItemOut,
 )
-from pdi.data.types import GroupID, Split
+from pdi.data.types import GroupID
 from pdi.engines.base_engine import TorchBaseEngine
 from pdi.results_and_metrics import (
     TestResults,
@@ -42,23 +44,7 @@ class ClassicEngine(TorchBaseEngine):
                 MISSING_DATA_STRATEGIES[cfg.model.mlp.missing_data_strategy]
             )
 
-        (self._train_dl, self._val_dl, self._test_dl) = (
-            self._data_prep.create_dataloaders(
-                batch_size={
-                    Split.TRAIN: self._cfg.training.batch_size,
-                    Split.VAL: self._cfg.validation.batch_size,
-                    Split.TEST: self._cfg.validation.batch_size,
-                },
-                num_workers={
-                    Split.TRAIN: self._cfg.training.num_workers,
-                    Split.VAL: self._cfg.validation.num_workers,
-                    Split.TEST: self._cfg.validation.num_workers,
-                },
-                undersample_missing_detectors=self._cfg.training.undersample_missing_detectors,
-                undersample_pions=self._cfg.training.undersample_pions,
-            )
-        )
-
+        self._train_dl, self._val_dl, self._test_dl = self.setup_dataloaders(self._cfg, self._data_prep) 
         if self._data_prep._is_experimental:
             raise RuntimeError(
                 "ClassicEngine got experimental data, it is not suited to handle it!"
@@ -134,8 +120,7 @@ class ClassicEngine(TorchBaseEngine):
                     val_f1=val_metrics.f1,
                     epoch=epoch,
                 )
-                if val_loss < min_loss:
-                    min_loss = val_loss
+                min_loss = min(min_loss, val_loss)
 
                 # Log validation metrics
                 self._log_results(
@@ -171,9 +156,9 @@ class ClassicEngine(TorchBaseEngine):
 
         loader_len = len(dataloader)
 
-        for i, (input_data, targets, gids, _) in enumerate(tqdm(dataloader), start=1):
+        for i, (input_data, targets, _, _) in enumerate(tqdm(dataloader), start=1):
             # Constant value for a batch, but cannot obtain single value with pytorch interface
-            gid: GroupID = cast(GroupID, int(gids[0]))
+            # gid: GroupID = cast(GroupID, int(gids[0]))
 
             input_data = input_data.to(self._cfg.training.device)
             binary_targets = (
@@ -199,38 +184,14 @@ class ClassicEngine(TorchBaseEngine):
             final_loss += loss.item()
             count += 1
 
-            # TODO: decide if it is useful or not; should I log_every tens of steps too?
-            self._log_results(
-                metrics={"loss": loss.item()},
-                step=loader_len * epoch + i,
-                csv_name=f"gid_{gid}_training_loss.csv",
-                offline=True,
-            )
-            if gid not in group_losses.keys():
-                group_losses[gid] = np.array([])
-            np.append(group_losses[gid], loss.item())
-
-            if i % self._cfg.training.steps_to_log == 0:
-                self._log_results(
-                    metrics={"loss": loss_run_sum},
-                    step=loader_len * epoch + i,
-                    csv_name="training_loss.csv",
-                )
-                loss_run_sum = 0
-
-        # No epoch number here, order of logged results must be sufficient
-        for gid, gid_losses in group_losses.items():
-            if len(gid_losses) == 0:
-                continue
-
-            self._log_results(
-                metrics={
-                    "gid": gid,
-                    "mean_loss_epoch": gid_losses.mean(),
-                    "gid_count": len(gid_losses),
-                },
-                csv_name="gid_losses.csv",
-                offline=True,
+            self.log_training_metrics(
+                log_results_func=self._log_results,
+                group_losses=group_losses,
+                loss_run_sum=loss_run_sum,
+                step=i,
+                loader_len=loader_len,
+                epoch=epoch,
+                steps_to_log=self._cfg.training.steps_to_log,
             )
 
         return final_loss / count
