@@ -1,6 +1,7 @@
 # pylint: disable=duplicate-code
 
 import os
+import time
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
@@ -195,6 +196,8 @@ class DomainAdaptationEngine(TorchBaseEngine):
         sim_iter = iter(sim_dataloader)
         exp_iter = iter(exp_dataloader)
 
+        start_time = time.time()
+
         # TODO: Consider training common GroupID missing detector combination for
         # sim and exp in each iteration. Maybe it will improve results---distributions
         # between groups can differ.
@@ -252,6 +255,9 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 epoch=epoch,
                 steps_to_log=self._cfg.training.steps_to_log,
             )
+
+        epoch_duration = time.time() - start_time
+        self._log_results(metrics={ "epoch_duration": epoch_duration }, csv_name="training_durations.csv", offline=False, step=None)
 
         return final_loss / count
 

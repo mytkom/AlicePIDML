@@ -1,5 +1,6 @@
 # pylint: disable=duplicate-code
 
+import time
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
@@ -155,6 +156,7 @@ class ClassicEngine(TorchBaseEngine):
         count = 0
 
         loader_len = len(dataloader)
+        start_time = time.time()
 
         for i, (input_data, targets, _, _) in enumerate(tqdm(dataloader), start=1):
             # Constant value for a batch, but cannot obtain single value with pytorch interface
@@ -193,6 +195,9 @@ class ClassicEngine(TorchBaseEngine):
                 epoch=epoch,
                 steps_to_log=self._cfg.training.steps_to_log,
             )
+        
+        epoch_duration = time.time() - start_time
+        self._log_results(metrics={ "epoch_duration": epoch_duration }, csv_name="training_durations.csv", offline=False, step=None)
 
         return final_loss / count
 
