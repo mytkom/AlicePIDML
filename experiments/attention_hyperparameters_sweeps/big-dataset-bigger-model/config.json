@@ -57,25 +57,13 @@
             "dropout": 0.9
         },
         "attention": {
-            "embed_hidden_layers": [
-                64,
-                32,
-                16
-            ],
+            "embed_hidden_layers": [128,256,256,128,64],
             "embed_dim": 64,
             "encoder_ff_hidden": 128,
-            "mlp_hidden_layers": [
-                64,
-                32,
-                16
-            ],
-            "pool_hidden_layers": [
-                64,
-                32,
-                16
-            ],
-            "num_heads": 2,
-            "num_blocks": 2,
+            "mlp_hidden_layers": [128,256,512,256,128,64],
+            "pool_hidden_layers": [128,256,256,128,64],
+            "num_heads": 8,
+            "num_blocks": 4,
             "activation": "ReLU",
             "dropout": 0.4
         },
@@ -152,9 +140,9 @@
                "total_iters": 50
            }
        },
-       "lr_scheduler": "polynomial",
+       "lr_scheduler": "cosine_restarts",
        "loss": "cross entropy",
-       "start_lr": 0.0003,
+       "start_lr": 0.0001,
        "device": "cuda",
        "steps_to_log": 50,
        "batch_size": 8192,
