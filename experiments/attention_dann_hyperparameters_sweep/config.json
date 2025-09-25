@@ -29,13 +29,13 @@
                 "multiplier": 8.0
             }
         },
-        "outlier_filtering_method": null,
+        "outlier_filtering_method": "isolation_forest",
         "train_size": 0.64,
         "test_size": 0.2,
         "is_run_3": true
     },
     "model": {
-        "architecture": "attention_dann",
+        "architecture": "attention",
         "mlp": {
             "hidden_layers": [
                 64,
@@ -56,40 +56,28 @@
             "dropout": 0.9
         },
         "attention": {
-            "embed_hidden_layers": [
-                64,
-                32,
-                16
-            ],
+            "embed_hidden_layers": [64],
             "embed_dim": 32,
             "encoder_ff_hidden": 128,
-            "mlp_hidden_layers": [
-                64,
-                32,
-                16
-            ],
-            "pool_hidden_layers": [
-                64,
-                32,
-                16
-            ],
+            "mlp_hidden_layers": [128,256,256,128,64],
+            "pool_hidden_layers": [128,256,256,128,64],
             "num_heads": 2,
             "num_blocks": 2,
             "activation": "ReLU",
-            "dropout": 0.4
+            "dropout": 0.2
         },
         "attention_dann": {
             "dom_hidden_layers": [128,256,256,128,64],
             "attention": {
-                "embed_hidden_layers": [128,256,256,128,64],
-                "embed_dim": 64,
+                "embed_hidden_layers": [64],
+                "embed_dim": 32,
                 "encoder_ff_hidden": 128,
                 "mlp_hidden_layers": [128,256,256,128,64],
                 "pool_hidden_layers": [128,256,256,128,64],
                 "num_heads": 2,
                 "num_blocks": 2,
                 "activation": "ReLU",
-                "dropout": 0.4
+                "dropout": 0.2
             },
             "alpha": 2.0
         },
@@ -97,12 +85,12 @@
     },
     "sweep": {
         "config": "experiments/attention_dann_hyperparameters_sweep/sweep_config.json",
-        "name": "AttentionDANN wide hyperparameter tuning",
+        "name": "AttentionDANN alpha sweep",
         "project_name": "Hyperparameter tuning"
     },
     "validation": {
         "batch_size": 8192,
-        "num_workers": 8,
+        "num_workers": 16,
         "validate_every": 3
     },
     "training": {
@@ -128,16 +116,16 @@
                "cycle_epoch_inc": 5
            },
            "polynomial": {
-               "power": 1.0
+               "power": 1.2
            },
            "constant": {
                "factor": 1.0,
                "total_iters": 50
            }
        },
-       "lr_scheduler": null,
+       "lr_scheduler": "polynomial",
        "loss": "cross entropy",
-       "start_lr": 0.003,
+       "start_lr": 0.0003,
        "device": "cuda",
        "steps_to_log": 50,
        "batch_size": 8192,

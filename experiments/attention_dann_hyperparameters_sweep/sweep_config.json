@@ -7,6 +7,9 @@
   "parameters": {
     "sweep": {
       "parameters": {
+        "seed": {
+          "values": [12, 24, 36, 48, 60]
+        },
         "model": {
           "parameters": {
             "attention_dann": {
@@ -15,17 +18,6 @@
                   "values": [0.0, 2.0, 4.0, 8.0]
                 }
               }
-            }
-          }
-        },
-        "training": {
-          "parameters": {
-            "start_lr": {
-              "values": [
-                0.001,
-                0.0003,
-                0.0001
-              ]
             }
           }
         }
