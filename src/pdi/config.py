@@ -212,9 +212,6 @@ class MLPConfig:
 
 @dataclasses.dataclass
 class EnsembleConfig:
-    # ids of groups of missing detectors
-    group_ids: List[int] = dataclasses.field(default_factory=list)
-
     # List of neurons in layer dimensions of hidden layers, input and output is fixed
     hidden_layers: List[int] = dataclasses.field(
         default_factory=mlp_default_hidden_layers

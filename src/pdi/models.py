@@ -17,6 +17,7 @@ from torch import nn
 from torch import Tensor
 from torch.nn.functional import one_hot
 from torch.autograd import Function
+import wandb
 
 from pdi.config import ModelConfig
 from pdi.data.constants import N_COLUMNS
@@ -28,20 +29,20 @@ ACTIVATIONS = {"ReLU": nn.ReLU}
 
 def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     if cfg.architecture == "mlp":
-        return NeuralNet(
+        model = NeuralNet(
             layers=[N_COLUMNS, *cfg.mlp.hidden_layers, 1],
             activation=ACTIVATIONS[cfg.mlp.activation],
             dropout=cfg.mlp.dropout,
         )
-    if cfg.architecture == "ensemble":
-        return NeuralNetEnsemble(
+    elif cfg.architecture == "ensemble":
+        model = NeuralNetEnsemble(
             group_ids=group_ids,
             hidden_layers=cfg.ensemble.hidden_layers,
             activation=ACTIVATIONS[cfg.ensemble.activation],
             dropout=cfg.ensemble.dropout,
         )
-    if cfg.architecture == "attention":
-        return AttentionModel(
+    elif cfg.architecture == "attention":
+        model = AttentionModel(
             in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
             embed_dim=cfg.attention.embed_dim,
@@ -53,8 +54,8 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             activation=ACTIVATIONS[cfg.attention.activation],
             dropout=cfg.attention.dropout,
         )
-    if cfg.architecture == "attention_dann":
-        return AttentionModelDANN(
+    elif cfg.architecture == "attention_dann":
+        model = AttentionModelDANN(
             in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
             embed_hidden_layers=cfg.attention.embed_hidden_layers,
             embed_dim=cfg.attention.embed_dim,
@@ -68,7 +69,17 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             dropout=cfg.attention_dann.attention.dropout,
             alpha=cfg.attention_dann.alpha,
         )
-    raise KeyError(f"Architecture {cfg.architecture} does not exist!")
+    else:
+        raise KeyError(f"Architecture {cfg.architecture} does not exist!")
+
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    # Log to wandb and stdout
+    wandb.log({"num_parameters": num_params})
+    print(f"Model {cfg.architecture} has been initialized:")
+    print(f"\tNumber of trainable parameters: {num_params}")
+
+    return model
 
 
 class NeuralNet(nn.Module):

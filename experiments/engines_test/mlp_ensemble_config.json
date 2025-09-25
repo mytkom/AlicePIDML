@@ -83,7 +83,6 @@
             "dropout": 0.9
         },
         "ensemble": {
-            "group_ids": [],
             "hidden_layers": [
                 64,
                 32,
