@@ -506,7 +506,7 @@ class DataPreparation:
         test_train_split: dict[Split, pd.DataFrame] = self._test_train_split(data)
 
         # Outlier filtering
-        if self._cfg.outlier_filtering_method:
+        if self._cfg.outlier_filtering_method and not self._is_experimental:
             test_train_split[Split.TRAIN] = self._filter_outliers(test_train_split[Split.TRAIN])
 
         # Standardization parameters (mean, std) based on train split
