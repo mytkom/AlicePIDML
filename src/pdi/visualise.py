@@ -80,7 +80,7 @@ def plot_metrics_vs_pt_comparison(
     save_dir: str | None = None,
 ) -> Iterator[tuple[Figure, str]]:
     """
-    Plots purity, efficiency, and F1 score vs pT for multiple models.
+    Plots purity, efficiency, F1 score, and particle counts vs pT for multiple models.
 
     Parameters
     ----------
@@ -107,7 +107,7 @@ def plot_metrics_vs_pt_comparison(
 
     Notes
     -----
-    - The function calculates purity, efficiency, and F1 score for each model over specified pT intervals.
+    - The function calculates purity, efficiency, F1 score, and particle counts for each model over specified pT intervals.
     - It generates and optionally saves a CSV file containing the metrics.
     """
     if not pt_intervals:
@@ -124,7 +124,7 @@ def plot_metrics_vs_pt_comparison(
             test_result.predictions >= test_result.test_metrics.threshold
         ).astype("int")
 
-        purities_pt_plot, efficiencies_pt_plot, _, momenta_avg = (
+        purities_pt_plot, efficiencies_pt_plot, _, momenta_avg, counts = (
             get_interval_purity_efficiency(targets, selected, pt, pt_intervals)
         )
 
@@ -139,45 +139,58 @@ def plot_metrics_vs_pt_comparison(
         df[f"Efficiency {model_name}"] = pd.Series(efficiencies_pt_plot)
         df[f"F1 {model_name}"] = pd.Series(f1_scores)
         df[f"Pt {model_name}"] = pd.Series(momenta_avg)
+        df[f"Counts {model_name}"] = pd.Series(counts)
 
     if len(target_codes) > 1:
         raise AttributeError("Cannot compare results of different target_code!")
     target_code: int = target_codes.pop()
 
     def plot(metric_name, y_label, title_suffix, file_suffix):
-        fig = plt.figure(figsize=(10, 6))
+        fig, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(10, 8), sharex=True, gridspec_kw={"height_ratios": [2, 1], "hspace": 0.02}
+        )
+
+        # Top plot for the main metric
         for model_name in test_metrics.keys():
-            plt.plot(
+            ax1.plot(
                 df[f"Pt {model_name}"],
                 df[f"{metric_name} {model_name}"],
                 "o-",
                 label=model_name,
             )
-        plt.xlabel("p_t (GeV/c)")
-        plt.ylabel(y_label)
-        plt.ylim([0, 1.1])
-        plt.title(
+        ax1.set_ylabel(y_label)
+        ax1.set_ylim([0, 1.1])
+        ax1.set_title(
             f"{y_label} vs p_t ({TARGET_CODE_TO_PART_NAME[target_code]}) {title_suffix}"
         )
-        plt.legend(loc="lower left")
-        plt.grid()
+        ax1.legend(loc="lower right")
+        ax1.grid()
+
+        # Bottom plot for particle counts
+        for model_name in test_metrics.keys():
+            ax2.bar(
+                df[f"Pt {model_name}"],
+                df[f"Counts {model_name}"],
+                width=0.2,
+                alpha=0.9,
+                color="gray",
+            )
+        ax2.set_xlabel("p_t (GeV/c)")
+        ax2.set_ylabel("Particle Counts")
+        ax2.set_yscale("log")
+        ax2.grid()
+
+        plt.tight_layout()
         plt.close()
 
         return fig, f"{file_suffix}-vs-pt.png"
 
     yield plot("Purity", "Purity", "", "purity")
-    yield plot(
-        "Efficiency",
-        "Efficiency",
-        "",
-        "efficiency",
-    )
+    yield plot("Efficiency", "Efficiency", "", "efficiency")
     yield plot("F1", "F1 Score", "", "f1")
 
     if save_dir:
         df.to_csv(os.path.join(save_dir, "metrics-vs-pt.csv"), index=False)
-
-
 def plot_learning_curve(
     loss: list[float], val_loss: list[float], label: str | None = None, save_dir: str | None = None
 ):

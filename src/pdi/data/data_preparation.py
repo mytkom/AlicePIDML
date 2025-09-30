@@ -593,8 +593,8 @@ class DataPreparation:
         return TestResults(
             targets,
             nsigma_normalized_predictions,
-            threshold_scaled,
             target_code,
+            threshold_scaled,
         )
 
     def create_dataloaders(
@@ -930,10 +930,12 @@ class DataPreparation:
             n_sigma_predictions = np.where(
                 n_sigma_predictions > threshold, threshold * 2, n_sigma_predictions
             )
+
             # make nsigmas to be in range 0 to 1
             n_sigma_predictions_normalized = minmax_scaler.fit_transform(
                 n_sigma_predictions.reshape(-1, 1)
             ).squeeze()
+
             # reverse it so lower nSigma is higher result
             n_sigma_predictions_normalized = 1 - n_sigma_predictions_normalized
             # bad sign

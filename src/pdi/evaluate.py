@@ -113,18 +113,18 @@ def get_interval_purity_efficiency(
     selected: NDArray[np.int32],
     momentum: NDArray[np.float32],
     intervals: list[tuple[float, float]],
-) -> tuple[list[float], list[float], pd.DataFrame, list[float]]:
+) -> tuple[list[float], list[float], pd.DataFrame, list[float], list[int]]:
     """get_interval_purity_efficiency calculates purity and efficiency metrics at different momentum intervals.
 
     Args:
         binary_targets (NDArray[np.int32]): array of positive and negative targets
         selected (NDArray[np.float32]): array of predicted classes
         momentum (NDArray[np.float32]): array of momentum values
-        intervals (list[tuple[float, float]]): momentum intevals
+        intervals (list[tuple[float, float]]): momentum intervals
 
     Returns:
-        tuple[list[float], list[float], pd.DataFrame, list[float]]:
-            array of purities, array of efficiencies, confidence intervals, middle values of each interval
+        tuple[list[float], list[float], pd.DataFrame, list[float], list[int]]:
+            array of purities, array of efficiencies, confidence intervals, middle values of each interval, particle counts
     """
 
     targets_intervals, selected_intervals, avg_momenta = _split_particles_intervals(
@@ -134,6 +134,7 @@ def get_interval_purity_efficiency(
     purities_p_plot = []
     efficiencies_p_plot = []
     confidence_intervals = pd.DataFrame()
+    particle_counts = []
 
     for targets, selected in zip(targets_intervals, selected_intervals):
         tp = int(np.sum(selected & targets))
@@ -156,9 +157,9 @@ def get_interval_purity_efficiency(
         )
         purities_p_plot.append(purity)
         efficiencies_p_plot.append(efficiency)
+        particle_counts.append(len(targets))  # Count the number of particles in the interval
 
-    return purities_p_plot, efficiencies_p_plot, confidence_intervals, avg_momenta
-
+    return purities_p_plot, efficiencies_p_plot, confidence_intervals, avg_momenta, particle_counts
 
 def calculate_precision_recall(
     tp: int, pp: int, p: int
