@@ -3,7 +3,7 @@ import pickle
 from typing import Optional
 from joblib.pool import np
 from numpy.typing import NDArray
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from pdi.evaluate import maximize_f1
 
 
@@ -16,6 +16,7 @@ class ValidationMetrics:
         self.f1, self.precision, self.recall, self.threshold = maximize_f1(
             targets, predictions
         )
+        self.accuracy = accuracy_score(targets, predictions >= self.threshold)
         self.loss = loss
 
     def to_dict(self) -> dict:
@@ -26,6 +27,7 @@ class ValidationMetrics:
             "f1": self.f1,
             "precision": self.precision,
             "recall": self.recall,
+            "accuracy": self.accuracy,
             "loss": self.loss,
             "threshold": self.threshold,
         }
@@ -57,6 +59,7 @@ class TestMetrics:
         self.recall = recall_score(
             binary_targets, self.binary_predictions, average="binary"
         )
+        self.accuracy = accuracy_score(binary_targets, self.binary_predictions)
         self.loss = loss
         self.threshold = threshold
         self.target_code = target_code
@@ -69,11 +72,11 @@ class TestMetrics:
             "f1": self.f1,
             "precision": self.precision,
             "recall": self.recall,
+            "accuracy": self.accuracy,
             "loss": self.loss,
             "threshold": self.threshold,
             "target_code": self.target_code,
         }
-
 
 class TestResults:
     """
