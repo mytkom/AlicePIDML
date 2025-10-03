@@ -495,7 +495,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
         # Class classification
         squeezed_targets_class = np.array(
             class_results["targets"], dtype=np.float32
-        ).squeeze()
+        ).squeeze() == self._target_code
         squeezed_predictions_class = np.array(class_results["predictions"]).squeeze()
 
         class_test_results = TestResults(

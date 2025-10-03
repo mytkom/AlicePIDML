@@ -919,9 +919,9 @@ class DataPreparation:
 
             # Apply nsigma formula
             n_sigma_predictions = np.where(
-                np.isnan(unstd["fTOFSignal"]),
+                np.isnan(unstd["fTOFSignal"]) | (unstd["fP"] < 0.5),
                 np.abs(tpc_n_sigmas),
-                np.sqrt(tpc_n_sigmas**2 + tof_n_sigmas**2),
+                np.sqrt(tof_n_sigmas**2),
             )
 
             # minmax_scaler = MinMaxScaler(feature_range=(0,1))

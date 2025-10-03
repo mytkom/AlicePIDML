@@ -26,16 +26,18 @@ from pdi.results_and_metrics import TestResults
 
 
 def plot_precision_recall_comparison(
-    test_metrics: dict[str, TestResults], save_dir=None
+    test_metrics: dict[str, TestResults], title_suffix: str = "", mask: NDArray | None = None
 ) -> Figure:
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(7, 6))
     target_codes = set()
     precision_recall_results: list[dict] = []
     for model_name, test_result in test_metrics.items():
-        binary_targets = test_result.targets == test_result.test_metrics.target_code
+        predictions = test_result.predictions[mask]
+        targets = test_result.targets[mask]
+        binary_targets = targets == test_result.test_metrics.target_code
         target_codes.add(test_result.test_metrics.target_code)
         precision, recall, thresholds = precision_recall_curve(
-            binary_targets, test_result.predictions
+            binary_targets, predictions
         )
 
         # Add to results
@@ -55,16 +57,10 @@ def plot_precision_recall_comparison(
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-    plt.title(f"Precision-Recall curve for {TARGET_CODE_TO_PART_NAME[target_code]}")
+    plt.title(f"Precision-Recall curve for {TARGET_CODE_TO_PART_NAME[target_code]}, {title_suffix}")
     plt.legend(loc="lower left")
     plt.grid()
     plt.close()
-
-    # Save plot and results if save_dir was provided
-    if save_dir:
-        plt.savefig(os.path.join(save_dir, "precision-recall.png"))
-        df = pd.DataFrame(precision_recall_results)
-        df.to_csv(os.path.join(save_dir, "precision-recall.csv"), index=False)
 
     return fig
 

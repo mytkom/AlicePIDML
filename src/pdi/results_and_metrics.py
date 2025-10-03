@@ -40,13 +40,12 @@ class TestMetrics:
 
     def __init__(
         self,
-        targets: NDArray,
+        binary_targets: NDArray,
         predictions: NDArray,
         target_code: int,
         threshold: float | None = None,
         loss: Optional[float] = None,
     ):
-        binary_targets = targets == target_code
         if threshold is not None:
             self.binary_predictions = predictions >= threshold
         else:

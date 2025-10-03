@@ -302,7 +302,7 @@ class ClassicEngine(TorchBaseEngine):
 
         val_loss = val_loss / count
 
-        targets_squeezed = np.array(targets, dtype=np.float32).squeeze()
+        targets_squeezed = np.array(targets, dtype=np.float32).squeeze() == self._target_code
         predictions_squeezed = np.array(predictions).squeeze()
         test_results = TestResults(
             targets=targets_squeezed,

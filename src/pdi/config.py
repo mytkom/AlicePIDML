@@ -20,7 +20,7 @@ class OCSVMConfig:
 @dataclasses.dataclass
 class IsolationForestConfig:
     n_estimators: int = 100  # Number of base estimators in the ensemble
-    max_samples: float | Literal['auto'] = "auto"  # Number of samples to draw from the dataset to train each base estimator
+    max_samples: int | Literal['auto'] = "auto"  # Number of samples to draw from the dataset to train each base estimator
     contamination: float | Literal['auto'] = 0.01  # Proportion of outliers in the dataset ('auto' or a float value)
     max_features: int | float = 1.0  # Number of features to draw from the dataset to train each base estimator
     bootstrap: bool = False  # Whether to use bootstrap sampling
