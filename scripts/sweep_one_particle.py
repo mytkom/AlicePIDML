@@ -1,7 +1,9 @@
 import json
 import tyro
+import os
 import wandb
 import hashlib
+import datetime
 from utils import dump_default_config, engine_single_run, load_config
 from pdi.constants import PART_NAME_TO_TARGET_CODE
 from pathlib import Path
@@ -13,17 +15,6 @@ if __name__ == "__main__":
     # Use tyro to parse CLI arguments and load the configuration
     cli_config = tyro.cli(OneParticleConfig)
 
-    if not cli_config.output_file:
-        # Calculate checksum of cli_config and save the file as training_runs/{checksum}.json
-        cli_config_dict = cli_config.__dict__
-        cli_config_json = json.dumps(cli_config_dict, sort_keys=True)
-        checksum = hashlib.md5(cli_config_json.encode()).hexdigest()
-        output_dir = Path("training_runs")
-        output_dir.mkdir(exist_ok=True)
-        cli_config.output_file = str(output_dir / f"sweep_{checksum}.json")
-
-    output_file_path = str(Path(cli_config.output_file).resolve())
-
     if cli_config.config:
         cli_config.config = str(Path(cli_config.config).resolve())
         config = load_config(cli_config.config)
@@ -31,6 +22,14 @@ if __name__ == "__main__":
         raise KeyError("Config path must be specified!")
 
     print(f"Loaded configuration for {cli_config.particle}:")
+    # Calculate checksum of cli_config and save the file as training_runs/{checksum}.json
+    cli_config_dict = cli_config.__dict__
+    cli_config_dict["timestamp"] = str(datetime.datetime.now())
+    cli_config_json = json.dumps(cli_config_dict, sort_keys=True)
+    checksum = hashlib.md5(cli_config_json.encode()).hexdigest()
+    config.project_dir = f"{config.project_dir}/sweep_{checksum}"
+    output_file_path = f"{config.results_dir}/{config.project_dir}/sweep_metadata.json"
+    print(f"Config project subdirectory {config.results_dir}/{config.project_dir}")
     print(config)
 
     with open(config.sweep.config) as f:
@@ -61,7 +60,7 @@ if __name__ == "__main__":
 
         with open(output_file_path, "w+") as output_file:
             json.dump(sweep_metadata, output_file, indent=4)
-        print(f"Updated metadata saved to {cli_config.output_file}")
+        print(f"Updated metadata saved to {output_file_path}")
 
     wandb.agent(sweep_id, function=run_and_collect)
 

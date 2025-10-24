@@ -65,8 +65,8 @@ class DomainAdaptationEngine(TorchBaseEngine):
 
         self._sim_data_prep.save_dataset_metadata(self._base_dir)
 
-    def get_data_prep(self) -> DataPreparation:
-        return self._sim_data_prep
+    def get_data_prep(self) -> tuple[DataPreparation, DataPreparation]:
+        return (self._sim_data_prep, self._exp_data_prep)
 
     def train(self):
         model = build_model(
@@ -537,3 +537,62 @@ class DomainAdaptationEngine(TorchBaseEngine):
         domain_test_results.save(domain_test_path)
 
         return class_test_results
+
+    def feature_extraction(
+        self,
+        model_dirpath: Optional[str] = None,
+    ):
+        model: torch.nn.Module = build_model(
+            self._cfg.model, group_ids=self._sim_data_prep.get_group_ids()
+        )
+        model, _ = self._load_model(model, model_dirpath)
+        model.to(self._cfg.training.device)
+    
+        sim_dataloader = cast(
+            CombinedDataLoader[MCBatchItem, MCBatchItemOut], self._sim_test_dl
+        )
+        exp_dataloader = cast(
+            CombinedDataLoader[ExpBatchItem, ExpBatchItemOut], self._exp_test_dl
+        )
+    
+        sim_extracted_features = []
+        exp_extracted_features = []
+    
+        model.eval()
+    
+        # Process simulated data sequentially
+        for sim_inputs, _, _, _ in tqdm(sim_dataloader, desc="Processing Simulated Data"):
+            sim_inputs = sim_inputs.to(self._cfg.training.device)
+    
+            with torch.autocast(
+                device_type=self._cfg.training.device,
+                dtype=torch.float16,
+                enabled=self._cfg.mixed_precision,
+            ):
+                sim_ext = model.feature_extraction(sim_inputs)
+    
+            # Detach and squeeze to reduce memory usage
+            sim_extracted_features.append(sim_ext.detach().cpu().squeeze().numpy())
+    
+            del sim_inputs, sim_ext  # Free memory
+    
+        # Process experimental data sequentially
+        for exp_inputs, _, _ in tqdm(exp_dataloader, desc="Processing Experimental Data"):
+            exp_inputs = exp_inputs.to(self._cfg.training.device)
+    
+            with torch.autocast(
+                device_type=self._cfg.training.device,
+                dtype=torch.float16,
+                enabled=self._cfg.mixed_precision,
+            ):
+                exp_ext = model.feature_extraction(exp_inputs)
+    
+            # Detach and squeeze to reduce memory usage
+            exp_extracted_features.append(exp_ext.detach().cpu().squeeze().numpy())
+    
+            del exp_inputs, exp_ext  # Free memory
+
+        sim_extracted_features = np.concatenate(sim_extracted_features, axis=0)
+        exp_extracted_features = np.concatenate(exp_extracted_features, axis=0)
+    
+        return sim_extracted_features, exp_extracted_features

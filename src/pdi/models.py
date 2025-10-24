@@ -75,7 +75,8 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     # Log to wandb and stdout
-    wandb.log({"num_parameters": num_params})
+    if wandb.run:
+        wandb.log({"num_parameters": num_params})
     print(f"Model {cfg.architecture} has been initialized:")
     print(f"\tNumber of trainable parameters: {num_params}")
 
@@ -309,13 +310,18 @@ class AttentionModelDANN(AttentionModel):
         )
         self.alpha = alpha
 
-    def forward(self, x: Tensor) -> Tensor:
-        # Feature extraction part
+    def feature_extraction(self, x: Tensor) -> Tensor:
         feature = self.to_feature_set(x)
         feature = self.emb(feature)
         feature = self.drop(feature)
         feature = self.encoder(feature)
         feature = self.pool(feature)
+
+        return feature
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Feature extraction part
+        feature = self.feature_extraction(x)
 
         # Domain adversarial part
         reverse_x = ReverseLayerF.apply(feature, self.alpha)

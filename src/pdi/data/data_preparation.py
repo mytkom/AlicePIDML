@@ -591,7 +591,7 @@ class DataPreparation:
         )
 
         return TestResults(
-            targets,
+            targets == target_code,
             nsigma_normalized_predictions,
             target_code,
             threshold_scaled,

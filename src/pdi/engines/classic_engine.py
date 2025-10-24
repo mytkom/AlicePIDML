@@ -53,8 +53,8 @@ class ClassicEngine(TorchBaseEngine):
 
         self._data_prep.save_dataset_metadata(self._base_dir)
 
-    def get_data_prep(self) -> DataPreparation:
-        return self._data_prep
+    def get_data_prep(self) -> tuple[DataPreparation]:
+        return (self._data_prep,)
 
     def train(self):
         model = build_model(self._cfg.model, group_ids=self._data_prep.get_group_ids())

@@ -33,8 +33,7 @@ def plot_precision_recall_comparison(
     precision_recall_results: list[dict] = []
     for model_name, test_result in test_metrics.items():
         predictions = test_result.predictions[mask]
-        targets = test_result.targets[mask]
-        binary_targets = targets == test_result.test_metrics.target_code
+        binary_targets = test_result.targets[mask]
         target_codes.add(test_result.test_metrics.target_code)
         precision, recall, thresholds = precision_recall_curve(
             binary_targets, predictions
@@ -115,7 +114,7 @@ def plot_metrics_vs_pt_comparison(
     # Prepare data for all models
     for model_name, test_result in test_metrics.items():
         target_codes.add(test_result.target_code)
-        targets = test_result.targets == test_result.test_metrics.target_code
+        targets = test_result.targets
         selected = (
             test_result.predictions >= test_result.test_metrics.threshold
         ).astype("int")

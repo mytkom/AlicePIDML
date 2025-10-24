@@ -341,7 +341,6 @@ class Config(JSONPyWizard):
 
 @dataclasses.dataclass
 class OneParticleConfig:
-    output_file: Optional[str] = None
     # If to run evaluation on test dataset and save results after training
     test: bool = True
     config: Optional[str] = None
@@ -352,7 +351,6 @@ class OneParticleConfig:
 
 @dataclasses.dataclass
 class AllParticlesConfig:
-    output_file: Optional[str] = None
     # Default config loaded, when no particle specific config is provided.
     # It can be used for example to test all particle species training on single config
     # or to do so with most of the species, but overwrite e.g. pions.

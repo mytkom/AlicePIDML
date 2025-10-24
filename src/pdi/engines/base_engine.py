@@ -59,7 +59,7 @@ class BaseEngine:
             json.dump(config_dict, config_file, indent=4)
 
     @abstractmethod
-    def get_data_prep(self) -> DataPreparation:
+    def get_data_prep(self) -> tuple[DataPreparation, ...]:
         pass
 
     @abstractmethod
