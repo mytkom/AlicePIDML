@@ -271,6 +271,21 @@ class AttentionDANNConfig:
     # in terms of source/target domain indistinguishibility
     alpha: float = 2.0
 
+@dataclasses.dataclass
+class AttentionCDANConfig:
+    # List of hidden layers sizes (number of neurons in each layer) for domain classifier
+    dom_hidden_layers: List[int] = dataclasses.field(
+        default_factory=mlp_default_hidden_layers
+    )
+
+    # Standard Attention model configuration
+    attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
+
+    # Multiplier of negative loss of domain classifier used in backpropagation algorithm
+    # the bigger, the stronger Domain Adaptation effect, if too high it can degrade class label
+    # classification performance, while not giving much better transformed feature space
+    # in terms of source/target domain indistinguishibility
+    alpha: float = 2.0
 
 @dataclasses.dataclass
 class ModelConfig:
@@ -279,7 +294,7 @@ class ModelConfig:
     # - ensemble: ensemble of MLPs, one for each missing detector combination (4 combinations)
     # - attention: attention-based neural network, it can handle missing data by one-hot encoding of input
     # - attention_dann: attention-based neural network with domain adversarial neural network approach (domain classifier added)
-    architecture: Literal["mlp", "ensemble", "attention", "attention_dann"] = (
+    architecture: Literal["mlp", "ensemble", "attention", "attention_dann", "attention_cdan"] = (
         "attention"
     )
 
@@ -289,6 +304,9 @@ class ModelConfig:
     attention: AttentionConfig = dataclasses.field(default_factory=AttentionConfig)
     attention_dann: AttentionDANNConfig = dataclasses.field(
         default_factory=AttentionDANNConfig
+    )
+    attention_cdan: AttentionCDANConfig = dataclasses.field(
+        default_factory=AttentionCDANConfig
     )
 
     # TODO: not implemented yet, will be great to test more sophisticated multistage training

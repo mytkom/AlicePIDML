@@ -69,6 +69,21 @@ def build_model(cfg: ModelConfig, group_ids: list[GroupID]):
             dropout=cfg.attention_dann.attention.dropout,
             alpha=cfg.attention_dann.alpha,
         )
+    elif cfg.architecture == "attention_cdan":
+        model = AttentionModelCDAN(
+            in_dim=N_COLUMNS + 1,  # +1 for value in one hot encoding
+            embed_hidden_layers=cfg.attention.embed_hidden_layers,
+            embed_dim=cfg.attention.embed_dim,
+            ff_hidden_layers=cfg.attention.mlp_hidden_layers,
+            encoder_ff_hidden=cfg.attention.encoder_ff_hidden,
+            pool_hidden_layers=cfg.attention.pool_hidden_layers,
+            num_heads=cfg.attention_cdan.attention.num_heads,
+            num_blocks=cfg.attention_cdan.attention.num_blocks,
+            dom_hidden_layers=cfg.attention_cdan.dom_hidden_layers,
+            activation=ACTIVATIONS[cfg.attention_cdan.attention.activation],
+            dropout=cfg.attention_cdan.attention.dropout,
+            alpha=cfg.attention_cdan.alpha,
+        )
     else:
         raise KeyError(f"Architecture {cfg.architecture} does not exist!")
 
@@ -329,5 +344,68 @@ class AttentionModelDANN(AttentionModel):
 
         # Classifier part
         class_posterior = self.net(feature)
+
+        return torch.cat((class_posterior, domain_posterior), dim=1)
+
+class AttentionModelCDAN(AttentionModel):
+    """AttentionModelCDAN is an attention-based model with Conditional Domain Adversarial Neural Network (CDAN) capabilities."""
+
+    def __init__(
+        self,
+        in_dim: int,
+        embed_hidden_layers: List[int],
+        embed_dim: int,
+        encoder_ff_hidden: int,
+        ff_hidden_layers: List[int],
+        pool_hidden_layers: List[int],
+        num_heads: int,
+        num_blocks: int,
+        dom_hidden_layers: List[int],
+        activation: type[nn.Module] = nn.ReLU,
+        dropout: float = 0.4,
+        alpha: float = 1.0,
+    ):
+        super().__init__(
+            in_dim,
+            embed_hidden_layers,
+            embed_dim,
+            encoder_ff_hidden,
+            ff_hidden_layers,
+            pool_hidden_layers,
+            num_heads,
+            num_blocks,
+            activation,
+            dropout,
+        )
+        self.domain_classifier = NeuralNet(
+            [embed_dim * embed_dim, *dom_hidden_layers, 1], activation
+        )
+        self.alpha = alpha
+
+    def feature_extraction(self, x: Tensor) -> Tensor:
+        feature = self.to_feature_set(x)
+        feature = self.emb(feature)
+        feature = self.drop(feature)
+        feature = self.encoder(feature)
+        feature = self.pool(feature)
+
+        return feature
+
+    def forward(self, x: Tensor) -> Tensor:
+        # Feature extraction part
+        feature = self.feature_extraction(x)
+
+        # Classifier part
+        class_posterior = self.net(feature)
+
+        # Conditional domain adversarial part
+        # Compute the outer product of feature and class_posterior
+        outer_product = torch.bmm(
+            class_posterior.unsqueeze(2), feature.unsqueeze(1)
+        ).view(feature.size(0), -1)
+
+        # Reverse gradient and pass through domain classifier
+        reverse_outer_product = ReverseLayerF.apply(outer_product, self.alpha)
+        domain_posterior = self.domain_classifier(reverse_outer_product)
 
         return torch.cat((class_posterior, domain_posterior), dim=1)

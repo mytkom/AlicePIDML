@@ -560,23 +560,14 @@ class DataPreparation:
 
         return self._prepared_data
 
-    def get_nsigma_test_results(
+    def get_normalized_n_sigma(
         self, target_code: int, threshold_unscaled: float = DEFAULT_NSIGMA_THRESHOLD
-    ) -> TestResults:
-        self._load_or_prepare_data([Split.TEST])
-
+    ):
         if not self._is_extended:
             raise AttributeError(
                 "Data must be extended (contain nSigma columns) to calculate nSigma test results."
             )
 
-        targets = (
-            pd.concat([
-                v[InputTarget.TARGET] for v in self._prepared_data[Split.TEST].values()
-            ])
-            .to_numpy()
-            .squeeze()
-        )
         unstandardized = pd.concat([
             v[InputTarget.UNSTANDARDIZED]
             for v in self._prepared_data[Split.TEST].values()
@@ -588,6 +579,23 @@ class DataPreparation:
         nsigma_normalized_predictions, scaler = nsigma_normalized_all[target_code]
         threshold_scaled = (
             1 - scaler.transform(np.array([[threshold_unscaled]])).squeeze()
+        )
+
+        return nsigma_normalized_predictions, threshold_scaled
+
+    def get_nsigma_test_results(
+        self, target_code: int, threshold_unscaled: float = DEFAULT_NSIGMA_THRESHOLD
+    ) -> TestResults:
+        self._load_or_prepare_data([Split.TEST])
+
+        nsigma_normalized_predictions, threshold_scaled = self.get_normalized_n_sigma(target_code, threshold_unscaled)
+
+        targets = (
+            pd.concat([
+                v[InputTarget.TARGET] for v in self._prepared_data[Split.TEST].values()
+            ])
+            .to_numpy()
+            .squeeze()
         )
 
         return TestResults(
@@ -921,15 +929,11 @@ class DataPreparation:
             n_sigma_predictions = np.where(
                 np.isnan(unstd["fTOFSignal"]) | (unstd["fP"] < 0.5),
                 np.abs(tpc_n_sigmas),
-                np.sqrt(tof_n_sigmas**2),
+                np.sqrt(tof_n_sigmas**2 + tpc_n_sigmas**2),
             )
 
             # minmax_scaler = MinMaxScaler(feature_range=(0,1))
             minmax_scaler = MinMaxScaler(feature_range=(0, 1))
-            # make transformed threshold ~0.5
-            n_sigma_predictions = np.where(
-                n_sigma_predictions > threshold, threshold * 2, n_sigma_predictions
-            )
 
             # make nsigmas to be in range 0 to 1
             n_sigma_predictions_normalized = minmax_scaler.fit_transform(

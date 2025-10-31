@@ -2,6 +2,8 @@
 
 import os
 import time
+import gzip
+import pickle
 from typing import Optional, cast
 from joblib.pool import np
 from numpy.typing import NDArray
@@ -412,6 +414,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
             "targets": [],
             "predictions": [],
         }
+        unlabelled_predictions = []
         domain_results = {
             "targets": [],
             "predictions": [],
@@ -450,6 +453,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
                 exp_out = model(exp_inputs)
+                exp_class_out = exp_out[:, 0].unsqueeze(dim=1)
                 exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
                 loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
@@ -480,6 +484,9 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 torch.cat((sim_domain_out, exp_domain_out), dim=0)
             )
             domain_results["predictions"].extend(predict_domain.cpu().detach().numpy())
+
+            exp_class_pred = torch.sigmoid(exp_class_out)
+            unlabelled_predictions.extend(exp_class_pred.cpu().detach().numpy())
 
             del exp_out
             del sim_inputs
@@ -518,6 +525,14 @@ class DomainAdaptationEngine(TorchBaseEngine):
             target_code=self._target_code,
             loss=test_loss,
         )
+
+        squeezed_unlabelled_predictions = np.array(unlabelled_predictions).squeeze()
+        squeezed_unlabelled_predictions_filepath = os.path.join(
+            self._base_dir if model_dirpath is None else model_dirpath,
+            "experimental_class_predictions.pkl"
+        )
+        with gzip.open(squeezed_unlabelled_predictions_filepath, "w") as file:
+            pickle.dump(squeezed_unlabelled_predictions, file)
 
         self._log_results(
             {
