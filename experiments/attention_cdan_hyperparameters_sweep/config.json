@@ -35,7 +35,7 @@
         "is_run_3": true
     },
     "model": {
-        "architecture": "attention_dann",
+        "architecture": "attention_cdan",
         "mlp": {
             "hidden_layers": [
                 64,
@@ -99,8 +99,8 @@
         "pretrained_model_dirpath": null
     },
     "sweep": {
-        "config": "experiments/attention_dann_hyperparameters_sweep/sweep_config.json",
-        "name": "AttentionDANN alpha sweep",
+        "config": "experiments/attention_cdan_hyperparameters_sweep/sweep_config.json",
+        "name": "AttentionCDAN alpha sweep",
         "project_name": "Hyperparameter tuning"
     },
     "validation": {
@@ -152,7 +152,7 @@
     },
     "sim_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC23k4g-535069-from-001-to-006.root"],
     "exp_dataset_paths": ["data/raw/MC_ALL_AO2D_LHC22o-apass7-528531-0600-nSigma.root"],
-    "project_dir": "attention_dann_hyperparameter_tuning",
+    "project_dir": "attention_cdan_hyperparameter_tuning",
     "results_dir": "results",
     "mixed_precision": false,
     "seed": 0,
