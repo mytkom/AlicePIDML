@@ -258,6 +258,8 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 steps_to_log=self._cfg.training.steps_to_log,
             )
 
+            del sim_inputs, exp_inputs, sim_out, exp_out, sim_class_out, sim_domain_out, exp_domain_out
+
         epoch_duration = time.time() - start_time
         self._log_results(metrics={ "epoch_duration": epoch_duration }, csv_name="training_durations.csv", offline=False, step=None)
 
@@ -315,24 +317,24 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 dtype=torch.float16,
                 enabled=self._cfg.mixed_precision,
             ):
-                # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
-                sim_out = model(sim_inputs)
-                sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
-                sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
+                with torch.no_grad():
+                    # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
+                    sim_out = model(sim_inputs)
+                    sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
+                    sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
-                exp_out = model(exp_inputs)
-                exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
+                    exp_out = model(exp_inputs)
+                    exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
-                loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
-                loss_source_domain = loss_func_domain(
-                    sim_domain_out, torch.zeros_like(sim_domain_out)
-                )
-                loss_target_domain = loss_func_domain(
-                    exp_domain_out, torch.ones_like(exp_domain_out)
-                )
+                    loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
+                    loss_source_domain = loss_func_domain(
+                        sim_domain_out, torch.zeros_like(sim_domain_out)
+                    )
+                    loss_target_domain = loss_func_domain(
+                        exp_domain_out, torch.ones_like(exp_domain_out)
+                    )
 
             loss = loss_source_class + loss_source_domain + loss_target_domain
-            loss.backward()
 
             # Handle metrics
             val_loss += loss.item()
@@ -351,10 +353,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
             domain_results["targets"].extend(domain_targets.cpu().detach().numpy())
             domain_results["predictions"].extend(predict_domain.cpu().detach().numpy())
 
-            del exp_out
-            del sim_inputs
-            del sim_targets
-            del exp_inputs
+            del sim_inputs, exp_inputs, sim_out, exp_out, sim_class_out, sim_domain_out, exp_domain_out
 
         if count == 0:
             count = 1
@@ -447,25 +446,25 @@ class DomainAdaptationEngine(TorchBaseEngine):
                 dtype=torch.float16,
                 enabled=self._cfg.mixed_precision,
             ):
-                # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
-                sim_out = model(sim_inputs)
-                sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
-                sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
+                with torch.no_grad():
+                    # Model returns Tensor with 0: positive class posterior, 1: target (exp) domain posterior
+                    sim_out = model(sim_inputs)
+                    sim_class_out = sim_out[:, 0].unsqueeze(dim=1)
+                    sim_domain_out = sim_out[:, 1].unsqueeze(dim=1)
 
-                exp_out = model(exp_inputs)
-                exp_class_out = exp_out[:, 0].unsqueeze(dim=1)
-                exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
+                    exp_out = model(exp_inputs)
+                    exp_class_out = exp_out[:, 0].unsqueeze(dim=1)
+                    exp_domain_out = exp_out[:, 1].unsqueeze(dim=1)
 
-                loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
-                loss_source_domain = loss_func_domain(
-                    sim_domain_out, torch.zeros_like(sim_domain_out)
-                )
-                loss_target_domain = loss_func_domain(
-                    exp_domain_out, torch.ones_like(exp_domain_out)
-                )
+                    loss_source_class = loss_func_class(sim_class_out, sim_binary_targets)
+                    loss_source_domain = loss_func_domain(
+                        sim_domain_out, torch.zeros_like(sim_domain_out)
+                    )
+                    loss_target_domain = loss_func_domain(
+                        exp_domain_out, torch.ones_like(exp_domain_out)
+                    )
 
             loss = loss_source_class + loss_source_domain + loss_target_domain
-            loss.backward()
 
             # Handle metrics
             test_loss += loss.item()
@@ -488,10 +487,7 @@ class DomainAdaptationEngine(TorchBaseEngine):
             exp_class_pred = torch.sigmoid(exp_class_out)
             unlabelled_predictions.extend(exp_class_pred.cpu().detach().numpy())
 
-            del exp_out
-            del sim_inputs
-            del sim_targets
-            del exp_inputs
+            del sim_inputs, exp_inputs, sim_out, exp_out, sim_class_out, sim_domain_out, exp_domain_out
 
         if count == 0:
             count = 1
