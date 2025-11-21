@@ -14,12 +14,6 @@ if __name__ == "__main__":
 
     cli_config = tyro.cli(AllParticlesConfig)
 
-    if cli_config.all:
-        cli_config.all = str(Path(cli_config.all).resolve())
-        all_config = load_config(cli_config.all)
-    else:
-        raise KeyError("Config path must be specified!")
-
     sweep_metadata: dict[int, list[dict]] = {}
 
     cli_config_dict = cli_config.__dict__
@@ -36,12 +30,13 @@ if __name__ == "__main__":
         if cli_config.__getattribute__(part_name):
             cli_config.__setattr__(part_name, str(Path(cli_config.__getattribute__(part_name)).resolve()))
             config = load_config(cli_config.__getattribute__(part_name))
+        elif cli_config.all:
+            cli_config.all = str(Path(cli_config.all).resolve())
+            config = load_config(cli_config.all)
         else:
-            config = all_config
-            print(f"Loading default (all) config for {part_name}")
+            raise KeyError(f"Config path for {part_name} or default config path must be specified!")
 
         print(f"Loaded configuration for {part_name}:")
-        # Calculate checksum of cli_config and save the file as training_runs/{checksum}.json
 
         config.project_dir = f"{config.project_dir}/sweep_{checksum}"
         output_file_path = f"{config.results_dir}/{config.project_dir}/sweep_metadata.json"
